@@ -7,10 +7,13 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
+import type { Response } from "express";
+import { streamDocument } from "../common/utils/stream-document";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
 import { EmployeesService } from "./employees.service";
 import { AuthGuard } from "../common/guards/auth.guard";
@@ -18,6 +21,7 @@ import { PermissionsGuard } from "../common/guards/permissions.guard";
 import { RequirePermissions } from "../common/decorators/permissions.decorator";
 import { PERMISSIONS } from "@mohan-bagh/shared";
 import { RegistrationService } from "../common/registration/registration.service";
+import { TeamProfilesService } from "../common/profiles/team-profiles.service";
 import {
   IdentityDocumentFiles,
   identityUploadOptions,
@@ -29,6 +33,7 @@ export class EmployeesController {
   constructor(
     private emp: EmployeesService,
     private registration: RegistrationService,
+    private profiles: TeamProfilesService,
   ) {}
 
   @Get("downline")
@@ -61,6 +66,91 @@ export class EmployeesController {
   @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
   brokers(@Req() req: any, @Param("id") id: string, @Query() q: any) {
     return this.emp.brokers(req.user.id, id, q);
+  }
+
+  @Get("master-brokers/:id")
+  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  getMasterBroker(@Param("id") id: string, @Req() req: any) {
+    return this.profiles.getDetail("MASTER_BROKER", id, {
+      actor: "EMPLOYEE",
+      userId: BigInt(req.user.id),
+    });
+  }
+
+  @Get("users/:id/documents/:type")
+  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  async document(
+    @Param("id") id: string,
+    @Param("type") type: string,
+    @Req() req: any,
+    @Res() res: Response,
+  ) {
+    const file = await this.profiles.getDocument(id, type, {
+      actor: "EMPLOYEE",
+      userId: BigInt(req.user.id),
+    });
+    return streamDocument(file, res);
+  }
+
+  @Patch("master-brokers/:id")
+  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "panDocument", maxCount: 1 },
+        { name: "aadhaarDocument", maxCount: 1 },
+      ],
+      identityUploadOptions,
+    ),
+  )
+  updateMasterBroker(
+    @Param("id") id: string,
+    @Body() body: any,
+    @Req() req: any,
+    @UploadedFiles() files?: IdentityDocumentFiles,
+  ) {
+    return this.profiles.update(
+      "MASTER_BROKER",
+      id,
+      body,
+      { actor: "EMPLOYEE", userId: BigInt(req.user.id) },
+      files,
+    );
+  }
+
+  @Get("brokers/:id")
+  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  getBroker(@Param("id") id: string, @Req() req: any) {
+    return this.profiles.getDetail("BROKER", id, {
+      actor: "EMPLOYEE",
+      userId: BigInt(req.user.id),
+    });
+  }
+
+  @Patch("brokers/:id")
+  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: "panDocument", maxCount: 1 },
+        { name: "aadhaarDocument", maxCount: 1 },
+      ],
+      identityUploadOptions,
+    ),
+  )
+  updateBroker(
+    @Param("id") id: string,
+    @Body() body: any,
+    @Req() req: any,
+    @UploadedFiles() files?: IdentityDocumentFiles,
+  ) {
+    return this.profiles.update(
+      "BROKER",
+      id,
+      body,
+      { actor: "EMPLOYEE", userId: BigInt(req.user.id) },
+      files,
+    );
   }
 
   @Patch("master-brokers/:id/status")

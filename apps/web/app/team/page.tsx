@@ -4,6 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { ApiResponse } from "@mohan-bagh/shared";
 import { api } from "../../lib/api";
 import AdminLayout from "../../components/admin/AdminLayout";
+import TeamMemberEditModal, {
+  emptyTeamEditForm,
+  type TeamEditFiles,
+  type TeamEditForm,
+  type TeamEditHints,
+  type TeamEditKind,
+} from "../../components/admin/TeamMemberEditModal";
+import TeamMemberViewModal, {
+  type TeamMemberDetail,
+} from "../../components/admin/TeamMemberViewModal";
 import { useRouter } from "next/navigation";
 
 interface CurrentUser {
@@ -240,6 +250,25 @@ export default function TeamPage() {
   const [statusBusy, setStatusBusy] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
+  const [editTarget, setEditTarget] = useState<{
+    list: StatusList;
+    id: string;
+    title: string;
+    kind: TeamEditKind;
+    fromView?: boolean;
+  } | null>(null);
+  const [editValues, setEditValues] = useState<TeamEditForm | null>(null);
+  const [editHints, setEditHints] = useState<TeamEditHints>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [viewTarget, setViewTarget] = useState<{
+    list: StatusList;
+    id: string;
+  } | null>(null);
+  const [viewDetail, setViewDetail] = useState<TeamMemberDetail | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
+
   useEffect(() => {
     api
       .get<ApiResponse<CurrentUser>>("/auth/me")
@@ -400,19 +429,30 @@ export default function TeamPage() {
     }
   }
 
-  function statusEndpoint(list: StatusList, id: string) {
+  function memberEndpoint(list: StatusList, id: string) {
     const role = user?.role;
 
     if (list === "master-brokers") {
       return role === "EMPLOYEE"
-        ? `/employee/master-brokers/${id}/status`
-        : `/admin/master-brokers/${id}/status`;
+        ? `/employee/master-brokers/${id}`
+        : `/admin/master-brokers/${id}`;
     }
 
-    if (list === "employees") return `/admin/employees/${id}/status`;
-    if (role === "MASTER_BROKER") return `/master-broker/brokers/${id}/status`;
-    if (role === "EMPLOYEE") return `/employee/brokers/${id}/status`;
-    return `/admin/brokers/${id}/status`;
+    if (list === "employees") return `/admin/employees/${id}`;
+    if (role === "MASTER_BROKER") return `/master-broker/brokers/${id}`;
+    if (role === "EMPLOYEE") return `/employee/brokers/${id}`;
+    return `/admin/brokers/${id}`;
+  }
+
+  function statusEndpoint(list: StatusList, id: string) {
+    return `${memberEndpoint(list, id)}/status`;
+  }
+
+  function apiErrorMessage(error: unknown, fallback: string) {
+    const message = (
+      error as { response?: { data?: { message?: string } } }
+    )?.response?.data?.message;
+    return message || fallback;
   }
 
   async function toggleStatus(
@@ -457,15 +497,225 @@ export default function TeamPage() {
         );
       }
     } catch (error) {
-      const message =
-        (
-          error as {
-            response?: { data?: { message?: string } };
-          }
-        )?.response?.data?.message ?? "Unable to update the status.";
-      setStatusError(message);
+      setStatusError(apiErrorMessage(error, "Unable to update the status."));
     } finally {
       setStatusBusy(null);
+    }
+  }
+
+  function documentBase() {
+    const role = user?.role;
+    if (role === "EMPLOYEE") return "/employee";
+    if (role === "MASTER_BROKER") return "/master-broker";
+    return "/admin";
+  }
+
+  function documentUrl(id: string, type: "PAN" | "AADHAAR") {
+    return `/api/v1${documentBase()}/users/${id}/documents/${type}`;
+  }
+
+  function closeView() {
+    setViewTarget(null);
+    setViewDetail(null);
+    setViewError(null);
+  }
+
+  async function openView(list: StatusList, id: string) {
+    setViewTarget({ list, id });
+    setViewDetail(null);
+    setViewError(null);
+
+    try {
+      const { data } = await api.get<ApiResponse<TeamMemberDetail>>(
+        memberEndpoint(list, id),
+      );
+      const detail = data.data;
+      if (!detail || !detail.name) throw new Error("Missing profile");
+      setViewDetail(detail);
+    } catch (error) {
+      setViewError(
+        apiErrorMessage(error, "Unable to load this profile."),
+      );
+    }
+  }
+
+  function editFormFromDetail(detail: TeamMemberDetail): TeamEditForm {
+    return {
+      ...emptyTeamEditForm,
+      name: detail.name,
+      email: detail.email ?? "",
+      mobile: detail.mobile ?? "",
+      address: detail.address ?? "",
+      city: detail.city ?? "",
+      designation: detail.designation ?? "",
+      firmName: detail.firmName ?? "",
+      reraNumber: detail.reraNumber ?? "",
+      bankHolderName: detail.bankHolderName ?? "",
+      bankName: detail.bankName ?? "",
+      bankIfsc: detail.bankIfsc ?? "",
+      bankAccount: "",
+      pan: "",
+      aadhaar: "",
+    };
+  }
+
+  function editHintsFromDetail(detail: TeamMemberDetail): TeamEditHints {
+    return {
+      bankAccountMasked: detail.bankAccountMasked,
+      panMasked: detail.panMasked,
+      aadhaarMasked: detail.aadhaarMasked,
+    };
+  }
+
+  function startEditFromView() {
+    if (!viewTarget || !viewDetail) return;
+
+    setEditTarget({
+      list: viewTarget.list,
+      id: viewTarget.id,
+      title: `Edit ${viewDetail.name}`,
+      kind: kindOfList(viewTarget.list),
+      fromView: true,
+    });
+    setEditValues(editFormFromDetail(viewDetail));
+    setEditHints(editHintsFromDetail(viewDetail));
+    setEditError(null);
+    closeView();
+  }
+
+  function kindOfList(list: StatusList): TeamEditKind {
+    return list === "employees"
+      ? "employee"
+      : list === "master-brokers"
+        ? "master-broker"
+        : "broker";
+  }
+
+  function closeEdit() {
+    setEditTarget(null);
+    setEditValues(null);
+    setEditHints({});
+    setEditError(null);
+  }
+
+  async function openEdit(list: StatusList, id: string, title: string) {
+    setEditTarget({ list, id, title, kind: kindOfList(list) });
+    setEditValues(null);
+    setEditHints({});
+    setEditError(null);
+
+    try {
+      const { data } = await api.get<ApiResponse<TeamMemberDetail>>(
+        memberEndpoint(list, id),
+      );
+      const detail = data.data;
+      if (!detail || !detail.name) throw new Error("Missing profile");
+      setEditValues(editFormFromDetail(detail));
+      setEditHints(editHintsFromDetail(detail));
+    } catch (error) {
+      setEditError(
+        apiErrorMessage(error, "Unable to load this profile for editing."),
+      );
+    }
+  }
+
+  async function saveEdit(values: TeamEditForm, files: TeamEditFiles) {
+    if (!editTarget) return;
+
+    setEditSaving(true);
+    setEditError(null);
+
+    try {
+      const endpoint = memberEndpoint(editTarget.list, editTarget.id);
+      const hasFiles = !!files.panDocument || !!files.aadhaarDocument;
+      const payload = hasFiles
+        ? (() => {
+            const body = new FormData();
+            Object.entries(values).forEach(([key, value]) =>
+              body.append(key, value ?? ""),
+            );
+            if (files.panDocument)
+              body.append("panDocument", files.panDocument);
+            if (files.aadhaarDocument)
+              body.append("aadhaarDocument", files.aadhaarDocument);
+            return body;
+          })()
+        : values;
+
+      const { data } = await api.patch<ApiResponse<TeamMemberDetail>>(
+        endpoint,
+        payload,
+      );
+      const updated = data.data ?? null;
+      const saved = {
+        name: updated?.name ?? values.name,
+        email: updated?.email ?? values.email,
+        mobile: updated?.mobile ?? values.mobile,
+        designation: updated?.designation ?? values.designation,
+      };
+      const id = editTarget.id;
+
+      if (editTarget.list === "master-brokers") {
+        setMasterBrokers((items) =>
+          items.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  name: saved.name,
+                  email: saved.email || null,
+                  phone: saved.mobile,
+                }
+              : item,
+          ),
+        );
+      } else if (editTarget.list === "employees") {
+        setEmployees((items) =>
+          items.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  name: saved.name,
+                  email: saved.email || null,
+                  phone: saved.mobile,
+                  role: saved.designation || item.role,
+                }
+              : item,
+          ),
+        );
+      } else {
+        setEmployeeBrokers((items) =>
+          items.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  name: saved.name,
+                  email: saved.email || null,
+                  phone: saved.mobile,
+                }
+              : item,
+          ),
+        );
+        setDownlineBrokers((items) =>
+          items.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  name: saved.name,
+                  email: saved.email || null,
+                  phone: saved.mobile,
+                }
+              : item,
+          ),
+        );
+      }
+
+      const { list, fromView } = editTarget;
+      closeEdit();
+      if (fromView) void openView(list, id);
+    } catch (error) {
+      setEditError(apiErrorMessage(error, "Unable to save the changes."));
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -920,6 +1170,9 @@ export default function TeamPage() {
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Status
                       </th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Action
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-900/10">
@@ -947,6 +1200,29 @@ export default function TeamPage() {
                               void toggleStatus("brokers", broker.id, broker.status)
                             }
                           />
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <button
+                            type="button"
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                            onClick={() => void openView("brokers", broker.id)}
+                          >
+                            View
+                          </button>
+
+                          <button
+                            type="button"
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                            onClick={() =>
+                              void openEdit(
+                                "brokers",
+                                broker.id,
+                                `Edit ${broker.name}`,
+                              )
+                            }
+                          >
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1076,9 +1352,23 @@ export default function TeamPage() {
 
                         <button
                           type="button"
+                          className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                          onClick={() =>
+                            void openView("master-brokers", broker.id)
+                          }
+                        >
+                          View
+                        </button>
+
+                        <button
+                          type="button"
                           className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
                           onClick={() =>
-                            console.log("Edit master broker", broker.id)
+                            void openEdit(
+                              "master-brokers",
+                              broker.id,
+                              `Edit ${broker.name}`,
+                            )
                           }
                         >
                           Edit
@@ -1128,6 +1418,9 @@ export default function TeamPage() {
                       <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Status
                       </th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Action
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-900/10">
@@ -1155,6 +1448,29 @@ export default function TeamPage() {
                               void toggleStatus("brokers", broker.id, broker.status)
                             }
                           />
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            type="button"
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                            onClick={() => void openView("brokers", broker.id)}
+                          >
+                            View
+                          </button>
+
+                          <button
+                            type="button"
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                            onClick={() =>
+                              void openEdit(
+                                "brokers",
+                                broker.id,
+                                `Edit ${broker.name}`,
+                              )
+                            }
+                          >
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1277,7 +1593,7 @@ export default function TeamPage() {
                           type="button"
                           className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
                           onClick={() =>
-                            console.log("View employee", employee.id)
+                            void openView("employees", employee.id)
                           }
                         >
                           View
@@ -1287,7 +1603,11 @@ export default function TeamPage() {
                           type="button"
                           className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
                           onClick={() =>
-                            console.log("Edit employee", employee.id)
+                            void openEdit(
+                              "employees",
+                              employee.id,
+                              `Edit ${employee.name}`,
+                            )
                           }
                         >
                           Edit
@@ -1301,6 +1621,82 @@ export default function TeamPage() {
           </div>
         )}
       </section>
+
+      {viewTarget && !viewDetail && !viewError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <p className="rounded-lg bg-white px-6 py-4 text-sm text-gray-600 shadow-xl">
+            Loading profile...
+          </p>
+        </div>
+      )}
+
+      {viewTarget && !viewDetail && viewError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
+            <p role="alert" className="text-sm text-red-700">
+              {viewError}
+            </p>
+
+            <button
+              type="button"
+              onClick={closeView}
+              className="mt-4 rounded-lg border border-amber-900/15 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {viewTarget && viewDetail && (
+        <TeamMemberViewModal
+          key={viewTarget.id}
+          detail={viewDetail}
+          documentUrl={(type) => documentUrl(viewTarget.id, type)}
+          onClose={closeView}
+          onEdit={startEditFromView}
+        />
+      )}
+
+      {editTarget && !editValues && !editError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <p className="rounded-lg bg-white px-6 py-4 text-sm text-gray-600 shadow-xl">
+            Loading profile...
+          </p>
+        </div>
+      )}
+
+      {editTarget && !editValues && editError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
+            <p role="alert" className="text-sm text-red-700">
+              {editError}
+            </p>
+
+            <button
+              type="button"
+              onClick={closeEdit}
+              className="mt-4 rounded-lg border border-amber-900/15 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {editTarget && editValues && (
+        <TeamMemberEditModal
+          key={editTarget.id}
+          title={editTarget.title}
+          kind={editTarget.kind}
+          defaultValues={editValues}
+          hints={editHints}
+          saving={editSaving}
+          error={editError}
+          onClose={closeEdit}
+          onSubmit={(values, files) => void saveEdit(values, files)}
+        />
+      )}
     </AdminLayout>
   );
 }

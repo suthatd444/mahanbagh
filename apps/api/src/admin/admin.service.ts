@@ -5,128 +5,47 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../infra/prisma/prisma.service";
-import { UsersService } from "../users/users.service";
-import { EncryptionService } from "../common/encryption/encryption.service";
-import { sha256 } from "../common/utils/crypto.util";
 import {
   normalizeUserStatus,
   statusToggleResponse,
 } from "../common/utils/user-status.util";
-import * as argon2 from "argon2";
 
 @Injectable()
 export class AdminService {
-  constructor(
-    private prisma: PrismaService,
-    private users: UsersService,
-    private enc: EncryptionService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  async createEmployee(data: any) {
-    const panHash = sha256(data.pan.toUpperCase());
-    const aadHash = sha256(data.aadhaar);
-    const exists = await this.prisma.identityDocument.findFirst({
-      where: {
-        OR: [
-          { documentType: "PAN", documentHash: panHash },
-          { documentType: "AADHAAR", documentHash: aadHash },
-        ],
-      },
-    });
-    if (exists) throw new BadRequestException("Document already exists");
-    return this.prisma.$transaction(async (tx) => {
-      const userCode = await this.users.generateUserCode("EMPLOYEE");
-      const role = await tx.role.findUnique({ where: { name: "EMPLOYEE" } });
-      const user = await tx.user.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          mobile: data.mobile,
-          passwordHash: await argon2.hash(data.password),
-          roleId: role!.id,
-          userCode,
-          status: "ACTIVE",
-          isVerified: true,
-        },
-      });
-      await tx.employeeProfile.create({
-        data: {
-          userId: user.id,
-          address: data.address,
-          city: data.city,
-          designation: data.designation,
-          joiningDate: new Date(data.joiningDate),
-          bankHolderName: data.bankHolderName,
-          bankName: data.bankName,
-          bankIfsc: data.bankIfsc,
-          panEncrypted: this.enc.encrypt(data.pan),
-          aadhaarEncrypted: this.enc.encrypt(data.aadhaar),
-          bankAccountEncrypted: this.enc.encrypt(data.bankAccount),
-        },
-      });
-      await tx.identityDocument.createMany({
-        data: [
-          { userId: user.id, documentType: "PAN", documentHash: panHash },
-          { userId: user.id, documentType: "AADHAAR", documentHash: aadHash },
-        ],
-      });
-      return user;
-    });
+  private toUserId(id: string): bigint {
+    try {
+      const userId = BigInt(id);
+      if (userId <= 0n) throw new Error("invalid");
+      return userId;
+    } catch {
+      throw new BadRequestException("Invalid user ID");
+    }
   }
 
-  async createMasterBroker(data: any) {
-    const panHash = sha256(data.pan.toUpperCase());
-    const aadHash = sha256(data.aadhaar);
-    const exists = await this.prisma.identityDocument.findFirst({
-      where: {
-        OR: [
-          { documentType: "PAN", documentHash: panHash },
-          { documentType: "AADHAAR", documentHash: aadHash },
-        ],
+  private async requireUser(id: string, roleCode: string, entity: string) {
+    const userId = this.toUserId(id);
+    const user = await this.prisma.users.findFirst({
+      where: { id: userId, deleted_at: null, roles: { code: roleCode } },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException(`${entity} not found`);
+    return user;
+  }
+
+  private async softDeleteUser(userId: bigint) {
+    const now = new Date();
+    await this.prisma.users.update({
+      where: { id: userId },
+      data: {
+        deleted_at: now,
+        status: "INACTIVE",
+        session_version: { increment: 1 },
+        updated_at: now,
       },
     });
-    if (exists) throw new BadRequestException("Document already exists");
-    return this.prisma.$transaction(async (tx) => {
-      const userCode = await this.users.generateUserCode("MASTER_BROKER");
-      const role = await tx.role.findUnique({
-        where: { name: "MASTER_BROKER" },
-      });
-      const user = await tx.user.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          mobile: data.mobile,
-          passwordHash: await argon2.hash(data.password),
-          roleId: role!.id,
-          userCode,
-          status: "ACTIVE",
-          isVerified: true,
-        },
-      });
-      await tx.masterBrokerProfile.create({
-        data: {
-          userId: user.id,
-          createdByUserId: data.createdByUserId || null,
-          address: data.address,
-          city: data.city,
-          firmName: data.firmName,
-          commissionPercentage: data.commissionPercentage,
-          bankHolderName: data.bankHolderName,
-          bankName: data.bankName,
-          bankIfsc: data.bankIfsc,
-          panEncrypted: this.enc.encrypt(data.pan),
-          aadhaarEncrypted: this.enc.encrypt(data.aadhaar),
-          bankAccountEncrypted: this.enc.encrypt(data.bankAccount),
-        },
-      });
-      await tx.identityDocument.createMany({
-        data: [
-          { userId: user.id, documentType: "PAN", documentHash: panHash },
-          { userId: user.id, documentType: "AADHAAR", documentHash: aadHash },
-        ],
-      });
-      return user;
-    });
+    return true;
   }
 
   async directoryEmployees(params: any) {
@@ -309,35 +228,39 @@ export class AdminService {
   }
 
   async directoryBrokers(params: any) {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = params;
+    const { page = 1, limit = 10, search = "" } = params;
     const skip = (page - 1) * limit;
-    const where: any = { deletedAt: null, role: { name: "BROKER" } };
+    const where: any = { deleted_at: null, roles: { code: "BROKER" } };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
         { email: { contains: search, mode: "insensitive" } },
         { mobile: { contains: search } },
-        { userCode: { contains: search } },
+        { user_code: { contains: search } },
       ];
     }
     const [total, items] = await Promise.all([
-      this.prisma.user.count({ where }),
-      this.prisma.user.findMany({
+      this.prisma.users.count({ where }),
+      this.prisma.users.findMany({
         where,
         skip,
         take: Number(limit),
-        orderBy: { [sortBy]: sortOrder },
-        include: { brokerProfile: true },
+        orderBy: { created_at: "desc" },
+        include: { broker_profiles: true },
       }),
     ]);
     return {
-      items,
+      items: items.map((item) => ({
+        id: item.id.toString(),
+        name: item.name,
+        user_code: item.user_code,
+        email: item.email,
+        mobile: item.mobile,
+        status: item.status,
+        created_at: item.created_at,
+        firm_name: item.broker_profiles?.firm_name ?? null,
+        rera_number: item.broker_profiles?.rera_number ?? null,
+      })),
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -347,61 +270,44 @@ export class AdminService {
     };
   }
 
-  async getEmployee(id: string) {
-    return this.prisma.user.findFirst({
-      where: { id, deletedAt: null, role: { name: "EMPLOYEE" } },
-      include: { employeeProfile: true },
-    });
-  }
-
   async deleteEmployee(id: string) {
-    const hasMBs = await this.prisma.masterBrokerProfile.findFirst({
-      where: { createdByUserId: id, user: { deletedAt: null } },
+    const user = await this.requireUser(id, "EMPLOYEE", "Employee");
+    const hasMBs = await this.prisma.master_broker_profiles.findFirst({
+      where: {
+        created_by_user_id: user.id,
+        users_master_broker_profiles_user_idTousers: { deleted_at: null },
+      },
+      select: { id: true },
     });
     if (hasMBs)
       throw new ForbiddenException(
         "Cannot delete employee with active master brokers",
       );
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        status: "INACTIVE",
-        sessionVersion: { increment: 1 },
-      },
-    });
-    return true;
+    return this.softDeleteUser(user.id);
   }
 
   async deleteMasterBroker(id: string) {
-    const hasBrokers = await this.prisma.brokerProfile.findFirst({
-      where: { masterBrokerId: id, user: { deletedAt: null } },
+    const user = await this.requireUser(id, "MASTER_BROKER", "Master broker");
+    const profile = await this.prisma.master_broker_profiles.findUnique({
+      where: { user_id: user.id },
+      select: { id: true },
     });
-    if (hasBrokers)
-      throw new ForbiddenException(
-        "Cannot delete master broker with active brokers",
-      );
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        status: "INACTIVE",
-        sessionVersion: { increment: 1 },
-      },
-    });
-    return true;
+    if (profile) {
+      const hasBrokers = await this.prisma.broker_profiles.findFirst({
+        where: { master_broker_id: profile.id, users: { deleted_at: null } },
+        select: { id: true },
+      });
+      if (hasBrokers)
+        throw new ForbiddenException(
+          "Cannot delete master broker with active brokers",
+        );
+    }
+    return this.softDeleteUser(user.id);
   }
 
   async deleteBroker(id: string) {
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        status: "INACTIVE",
-        sessionVersion: { increment: 1 },
-      },
-    });
-    return true;
+    const user = await this.requireUser(id, "BROKER", "Broker");
+    return this.softDeleteUser(user.id);
   }
 
   async setEmployeeStatus(id: string, rawStatus: unknown, actorId?: string) {

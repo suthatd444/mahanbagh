@@ -1,5 +1,4 @@
 "use client";
-
 import { Suspense } from "react";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -79,6 +78,14 @@ function createInitialForm(role: Role): TeamMemberForm {
 }
 
 export default function CreateTeamMemberPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading...</div>}>
+      <CreateTeamMemberForm />
+    </Suspense>
+  );
+}
+
+function CreateTeamMemberForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
