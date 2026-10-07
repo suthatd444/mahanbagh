@@ -1,0 +1,10 @@
+node_modules
+apps/api/uploads/
+apps/api/node_modules
+apps/web/node_modules
+apps/api/dist
+apps/web/dist
+apps/api/dist2
+apps/web/dist2
+apps/web/.next
+
