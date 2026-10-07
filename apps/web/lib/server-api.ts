@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const serverApi = axios.create({
-  baseURL: process.env.API_BASE_URL ?? 'http://localhost:3001/api/v1',
+  baseURL: process.env.API_BASE_URL ?? 'https://crm.mohanbagh.in/backend/api/v1',
   headers: {
     Accept: 'application/json',
   },

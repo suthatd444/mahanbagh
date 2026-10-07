@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001/api/v1";
+const apiBaseUrl = process.env.API_BASE_URL ?? "https://crm.mohanbagh.in/backend/api/v1";
 
 async function proxy(request: NextRequest, path: string[]) {
   const method = request.method;

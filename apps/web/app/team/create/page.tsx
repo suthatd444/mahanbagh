@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -323,6 +324,7 @@ export default function CreateTeamMemberPage() {
   }
 
   return (
+        <Suspense fallback={<div>Loading...</div>}>
     <AdminLayout>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Page Header */}
@@ -706,6 +708,7 @@ export default function CreateTeamMemberPage() {
         </div>
       </form>
     </AdminLayout>
+    </Suspense>
   );
 }
 
