@@ -13,40 +13,69 @@ interface AdminLayoutProps {
   } | null;
 }
 
-const navigation = [
-  {
-    label: "Dashboard",
-    abbreviation: "D",
-    href: "/dashboard",
-  },
-  // {
-  //   label: "Users",
-  //   abbreviation: "U",
-  //   href: "/users",
-  // },
-  {
-    label: "Team",
-    abbreviation: "T",
-    href: "/team",
-  },
-  // {
-  //   label: "Reports",
-  //   abbreviation: "R",
-  //   href: "/reports",
-  // },
-  // {
-  //   label: "Settings",
-  //   abbreviation: "S",
-  //   href: "/settings",
-  // },
-];
+interface NavItem {
+  label: string;
+  abbreviation: string;
+  href: string;
+}
+
+function buildNavigation(role?: string | null): NavItem[] {
+  const canManageProjects = role === "ADMIN";
+  // Every role manages a team of brokers below them: employees create
+  // top-level brokers and brokers grow their own downline.
+  const canManageTeam = true;
+
+  return [
+    {
+      label: "Dashboard",
+      abbreviation: "D",
+      href: "/dashboard",
+    },
+    // {
+    //   label: "Users",
+    //   abbreviation: "U",
+    //   href: "/users",
+    // },
+    ...(canManageTeam
+      ? [
+          {
+            label: "Team",
+            abbreviation: "T",
+            href: "/team",
+          },
+        ]
+      : []),
+    {
+      label: "Projects",
+      abbreviation: "P",
+      href: canManageProjects ? "/projects" : "/projects/browse",
+    },
+    {
+      label: "Enquiries",
+      abbreviation: "E",
+      href: "/enquiries",
+    },
+    // {
+    //   label: "Reports",
+    //   abbreviation: "R",
+    //   href: "/reports",
+    // },
+    // {
+    //   label: "Settings",
+    //   abbreviation: "S",
+    //   href: "/settings",
+    // },
+  ];
+}
 
 function Sidebar({
   mobile = false,
   onClose,
+  items,
 }: {
   mobile?: boolean;
   onClose?: () => void;
+  items: NavItem[];
 }) {
   const pathname = usePathname();
 
@@ -83,7 +112,7 @@ function Sidebar({
         className="flex-1 space-y-1 px-3 py-6"
         aria-label="Dashboard navigation"
       >
-        {navigation.map((item) => {
+        {items.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/dashboard" &&
@@ -213,6 +242,7 @@ export default function AdminLayout({ children, user }: AdminLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const router = useRouter();
+  const navigation = buildNavigation(user?.role);
 
   async function logout() {
     try {
@@ -230,7 +260,7 @@ export default function AdminLayout({ children, user }: AdminLayoutProps) {
   return (
     <div className="min-h-screen bg-bg text-gray-900">
       {/* Desktop sidebar */}
-      <Sidebar />
+      <Sidebar items={navigation} />
 
       {/* Mobile sidebar */}
       {isSidebarOpen && (
@@ -238,7 +268,11 @@ export default function AdminLayout({ children, user }: AdminLayoutProps) {
           className="fixed inset-0 z-40 bg-gray-950/40 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
         >
-          <Sidebar mobile onClose={() => setIsSidebarOpen(false)} />
+          <Sidebar
+            items={navigation}
+            mobile
+            onClose={() => setIsSidebarOpen(false)}
+          />
         </div>
       )}
 

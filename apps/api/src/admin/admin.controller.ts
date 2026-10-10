@@ -18,7 +18,7 @@ import { streamDocument } from "../common/utils/stream-document";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
 import { AdminService } from "./admin.service";
 import { AuthGuard } from "../common/guards/auth.guard";
-import { PermissionsGuard } from "../common/guards/permissions.guard"; 
+import { PermissionsGuard } from "../common/guards/permissions.guard";
 import { RequirePermissions } from "../common/decorators/permissions.decorator";
 import { PERMISSIONS } from "@mohan-bagh/shared";
 import { RegistrationService } from "../common/registration/registration.service";
@@ -43,25 +43,16 @@ export class AdminController {
     return this.admin.directoryEmployees(q);
   }
 
-  @Get("directory/master-brokers")
-  @RequirePermissions(
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-  )
-  masterBrokers(@Query() q: any) {
-    return this.admin.directoryMasterBrokers(q);
-  }
-
   @Get("directory/brokers")
   @RequirePermissions(PERMISSIONS.BROKER_VIEW_ALL)
   brokers(@Query() q: any) {
     return this.admin.directoryBrokers(q);
   }
 
-  @Get("master-brokers/:id/brokers")
+  @Get("brokers/:id/downline")
   @RequirePermissions(PERMISSIONS.BROKER_VIEW_ALL)
-  masterBrokerBrokers(@Param("id") id: string, @Query() q: any) {
-    return this.admin.directoryMasterBrokerBrokers(id, q);
+  brokerDownline(@Param("id") id: string, @Query() q: any) {
+    return this.admin.directoryBrokerDownline(id, q);
   }
 
   @Post("employees")
@@ -87,8 +78,8 @@ export class AdminController {
     };
   }
 
-  @Post("master-brokers")
-  @RequirePermissions(PERMISSIONS.EMPLOYEE_MANAGE)
+  @Post("brokers")
+  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -98,14 +89,14 @@ export class AdminController {
       identityUploadOptions,
     ),
   )
-  async createMasterBroker(
+  async createBroker(
     @Body() body: Record<string, string>,
     @UploadedFiles() files: IdentityDocumentFiles,
   ) {
-    const user = await this.registration.createMasterBroker(body, files);
+    const user = await this.registration.createBroker(body, files);
     return {
       status: true,
-      message: "Master broker created successfully.",
+      message: "Broker created successfully.",
       data: user,
     };
   }
@@ -119,7 +110,6 @@ export class AdminController {
   @Get("users/:id/documents/:type")
   @RequirePermissions(
     PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
     PERMISSIONS.BROKER_VIEW_ALL,
   )
   async document(
@@ -148,39 +138,6 @@ export class AdminController {
     @UploadedFiles() files?: IdentityDocumentFiles,
   ) {
     return this.profiles.update("EMPLOYEE", id, body, { actor: "ADMIN" }, files);
-  }
-
-  @Get("master-brokers/:id")
-  @RequirePermissions(
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-  )
-  getMasterBroker(@Param("id") id: string) {
-    return this.profiles.getDetail("MASTER_BROKER", id, { actor: "ADMIN" });
-  }
-
-  @Patch("master-brokers/:id")
-  @RequirePermissions(
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-  )
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: "panDocument", maxCount: 1 },
-        { name: "aadhaarDocument", maxCount: 1 },
-      ],
-      identityUploadOptions,
-    ),
-  )
-  updateMasterBroker(
-    @Param("id") id: string,
-    @Body() body: any,
-    @UploadedFiles() files?: IdentityDocumentFiles,
-  ) {
-    return this.profiles.update("MASTER_BROKER", id, body, {
-      actor: "ADMIN",
-    }, files);
   }
 
   @Get("brokers/:id")
@@ -214,19 +171,6 @@ export class AdminController {
     return this.admin.setEmployeeStatus(id, body?.status, req.user.id);
   }
 
-  @Patch("master-brokers/:id/status")
-  @RequirePermissions(
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-  )
-  updateMasterBrokerStatus(
-    @Param("id") id: string,
-    @Body() body: any,
-    @Req() req: any,
-  ) {
-    return this.admin.setMasterBrokerStatus(id, body?.status, req.user.id);
-  }
-
   @Patch("brokers/:id/status")
   @RequirePermissions(PERMISSIONS.BROKER_UPDATE_ALL)
   updateBrokerStatus(@Param("id") id: string, @Body() body: any, @Req() req: any) {
@@ -237,15 +181,6 @@ export class AdminController {
   @RequirePermissions(PERMISSIONS.EMPLOYEE_MANAGE)
   deleteEmployee(@Param("id") id: string) {
     return this.admin.deleteEmployee(id);
-  }
-
-  @Delete("master-brokers/:id")
-  @RequirePermissions(
-    PERMISSIONS.EMPLOYEE_MANAGE,
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-  )
-  deleteMasterBroker(@Param("id") id: string) {
-    return this.admin.deleteMasterBroker(id);
   }
 
   @Delete("brokers/:id")

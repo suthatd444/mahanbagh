@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type TeamEditKind = "employee" | "master-broker" | "broker";
+export type TeamEditKind = "employee" | "broker";
 
 export interface TeamEditForm {
   name: string;
@@ -159,31 +159,33 @@ export default function TeamMemberEditModal({
     const aadhaar = form.aadhaar.trim();
     const ifsc = form.bankIfsc.trim().toUpperCase();
 
+    // Name, mobile, PAN and Aadhaar are compulsory. PAN/Aadhaar may be left
+    // blank only when a value is already on file; every other field and upload
+    // is optional.
+    const panOnFile = !!hints?.panMasked;
+    const aadhaarOnFile = !!hints?.aadhaarMasked;
+
     if (!name) return setValidationError("Name is required.");
     if (!/^\d{10}$/.test(mobile))
       return setValidationError("Enter a valid 10-digit mobile number.");
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return setValidationError("Enter a valid email address.");
-    if (!address) return setValidationError("Address is required.");
-    if (!city) return setValidationError("City is required.");
-    if (kind === "employee" && !form.designation.trim())
-      return setValidationError("Designation is required.");
     if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc))
       return setValidationError("Enter a valid IFSC code.");
     if (bankAccount && !/^\d{6,20}$/.test(bankAccount))
       return setValidationError(
         "Account number must be 6 to 20 digits without spaces.",
       );
+    if (!pan && !panOnFile)
+      return setValidationError("PAN number is required.");
     if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan))
       return setValidationError("Enter a valid PAN number.");
+    if (!aadhaar && !aadhaarOnFile)
+      return setValidationError("Aadhaar number is required.");
     if (aadhaar && !/^\d{12}$/.test(aadhaar))
       return setValidationError("Aadhaar must be exactly 12 digits.");
-    if (pan && !files.panDocument)
-      return setValidationError("Attach the PAN document file as well.");
     if (files.panDocument && !pan)
       return setValidationError("Enter the PAN number for the attached file.");
-    if (aadhaar && !files.aadhaarDocument)
-      return setValidationError("Attach the Aadhaar document file as well.");
     if (files.aadhaarDocument && !aadhaar)
       return setValidationError(
         "Enter the Aadhaar number for the attached file.",
@@ -272,7 +274,6 @@ export default function TeamMemberEditModal({
             <div className="sm:col-span-2">
               <Field
                 label="Address"
-                required
                 value={form.address}
                 onChange={(value) => update({ address: value })}
               />
@@ -280,7 +281,6 @@ export default function TeamMemberEditModal({
 
             <Field
               label="City"
-              required
               value={form.city}
               onChange={(value) => update({ city: value })}
             />
@@ -288,7 +288,6 @@ export default function TeamMemberEditModal({
             {kind === "employee" && (
               <Field
                 label="Designation"
-                required
                 value={form.designation}
                 onChange={(value) => update({ designation: value })}
               />
@@ -356,6 +355,7 @@ export default function TeamMemberEditModal({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="PAN number"
+                required={!hints?.panMasked}
                 value={form.pan}
                 placeholder={
                   hints?.panMasked ? `On file: ${hints.panMasked}` : "e.g. ABCDE1234F"
@@ -375,6 +375,7 @@ export default function TeamMemberEditModal({
 
               <Field
                 label="Aadhaar number"
+                required={!hints?.aadhaarMasked}
                 value={form.aadhaar}
                 placeholder={
                   hints?.aadhaarMasked
@@ -401,9 +402,9 @@ export default function TeamMemberEditModal({
             </div>
 
             <p className="text-[11px] text-gray-400">
-              Upload a new file together with its number to replace the
-              document on record. Existing numbers stay untouched when left
-              blank.
+              Document uploads are optional. Upload a new file together with its
+              number to replace the document on record. Existing numbers stay
+              untouched when left blank.
             </p>
           </fieldset>
 

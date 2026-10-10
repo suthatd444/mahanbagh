@@ -41,13 +41,20 @@ export const identityUploadOptions = {
   },
 };
 
-export function getIdentityUploadFiles(files: IdentityDocumentFiles) {
-  const panDocument = files.panDocument?.[0];
-  const aadhaarDocument = files.aadhaarDocument?.[0];
-  if (!panDocument || !aadhaarDocument) {
-    throw new BadRequestException('PAN and Aadhaar documents are required');
-  }
-  return { panDocument, aadhaarDocument };
+export type IdentityUploadFiles = {
+  panDocument?: Express.Multer.File;
+  aadhaarDocument?: Express.Multer.File;
+};
+
+// Identity document (PAN/Aadhaar) uploads are optional. Only the files that
+// were actually provided are returned so callers can persist them selectively.
+export function getIdentityUploadFiles(
+  files: IdentityDocumentFiles,
+): IdentityUploadFiles {
+  return {
+    panDocument: files.panDocument?.[0],
+    aadhaarDocument: files.aadhaarDocument?.[0],
+  };
 }
 
 export async function removeIdentityUploadFiles(files: IdentityDocumentFiles) {

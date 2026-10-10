@@ -37,48 +37,45 @@ export class EmployeesController {
   ) {}
 
   @Get("downline")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
   downline(@Req() req: any, @Query() q: any) {
     return this.emp.downline(req.user.id, q);
   }
 
   @Post("referrals")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_CREATE)
   createReferral(@Req() req: { user: { id: string } }) {
-    const token = this.emp.createMasterBrokerReferral(req.user.id);
+    const token = this.emp.createBrokerReferral(req.user.id);
     return {
       status: true,
-      message: "Master broker referral link created.",
+      message: "Broker referral link created.",
       data: { token },
     };
   }
 
   @Get("brokers")
-  @RequirePermissions(
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-    PERMISSIONS.BROKER_CREATE,
-  )
+  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
   allBrokers(@Req() req: any, @Query() q: any) {
     return this.emp.allBrokers(req.user.id, q);
   }
 
-  @Get("master-brokers/:id/brokers")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @Get("brokers/:id/downline")
+  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
   brokers(@Req() req: any, @Param("id") id: string, @Query() q: any) {
     return this.emp.brokers(req.user.id, id, q);
   }
 
-  @Get("master-brokers/:id")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
-  getMasterBroker(@Param("id") id: string, @Req() req: any) {
-    return this.profiles.getDetail("MASTER_BROKER", id, {
+  @Get("brokers/:id")
+  @RequirePermissions(PERMISSIONS.BROKER_VIEW_ASSIGNED)
+  getBroker(@Param("id") id: string, @Req() req: any) {
+    return this.profiles.getDetail("BROKER", id, {
       actor: "EMPLOYEE",
       userId: BigInt(req.user.id),
     });
   }
 
   @Get("users/:id/documents/:type")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_VIEW_ASSIGNED)
   async document(
     @Param("id") id: string,
     @Param("type") type: string,
@@ -92,43 +89,8 @@ export class EmployeesController {
     return streamDocument(file, res);
   }
 
-  @Patch("master-brokers/:id")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: "panDocument", maxCount: 1 },
-        { name: "aadhaarDocument", maxCount: 1 },
-      ],
-      identityUploadOptions,
-    ),
-  )
-  updateMasterBroker(
-    @Param("id") id: string,
-    @Body() body: any,
-    @Req() req: any,
-    @UploadedFiles() files?: IdentityDocumentFiles,
-  ) {
-    return this.profiles.update(
-      "MASTER_BROKER",
-      id,
-      body,
-      { actor: "EMPLOYEE", userId: BigInt(req.user.id) },
-      files,
-    );
-  }
-
-  @Get("brokers/:id")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
-  getBroker(@Param("id") id: string, @Req() req: any) {
-    return this.profiles.getDetail("BROKER", id, {
-      actor: "EMPLOYEE",
-      userId: BigInt(req.user.id),
-    });
-  }
-
   @Patch("brokers/:id")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_UPDATE_ASSIGNED)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -153,18 +115,8 @@ export class EmployeesController {
     );
   }
 
-  @Patch("master-brokers/:id/status")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
-  updateMasterBrokerStatus(
-    @Param("id") id: string,
-    @Body() body: any,
-    @Req() req: { user: { id: string } },
-  ) {
-    return this.emp.setMasterBrokerStatus(req.user.id, id, body?.status);
-  }
-
   @Patch("brokers/:id/status")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_UPDATE_ASSIGNED)
   updateBrokerStatus(
     @Param("id") id: string,
     @Body() body: any,
@@ -173,30 +125,8 @@ export class EmployeesController {
     return this.emp.setBrokerStatus(req.user.id, id, body?.status);
   }
 
-  @Post("master-brokers")
-  @RequirePermissions(PERMISSIONS.MASTER_BROKER_MANAGE)
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: "panDocument", maxCount: 1 },
-        { name: "aadhaarDocument", maxCount: 1 },
-      ],
-      identityUploadOptions,
-    ),
-  )
-  createMB(
-    @Body() body: Record<string, string>,
-    @UploadedFiles() files: IdentityDocumentFiles,
-    @Req() req: { user: { id: string } },
-  ) {
-    return this.registration.createMasterBroker(body, files, req.user.id);
-  }
-
   @Post("brokers")
-  @RequirePermissions(
-    PERMISSIONS.MASTER_BROKER_MANAGE,
-    PERMISSIONS.BROKER_CREATE,
-  )
+  @RequirePermissions(PERMISSIONS.BROKER_CREATE)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -211,15 +141,9 @@ export class EmployeesController {
     @UploadedFiles() files: IdentityDocumentFiles,
     @Req() req: { user: { id: string } },
   ) {
-    const masterBrokerProfileId = await this.emp.ownedMasterBrokerProfileId(
-      req.user.id,
-      body.masterBrokerId,
-    );
-    const user = await this.registration.createBroker(
-      body,
-      files,
-      masterBrokerProfileId,
-    );
+    const user = await this.registration.createBroker(body, files, {
+      createdByUserId: req.user.id,
+    });
     return {
       status: true,
       message: "Broker created successfully.",

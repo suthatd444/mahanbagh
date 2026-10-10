@@ -14,28 +14,48 @@ export class PublicService {
 
   async getReferral(token: string) {
     const employeeId = verifyEmployeeReferralToken(token);
-    if (employeeId) return { targetRole: "MASTER_BROKER" };
+    if (employeeId) return { targetRole: "BROKER", parentBrokerName: null };
 
     const referral = await this.prisma.broker_referrals.findFirst({
-      where: { token_hash: sha256(token), revoked_at: null, expires_at: { gt: new Date() } },
-      include: { master_broker_profiles: { include: { users_master_broker_profiles_user_idTousers: true } } },
+      where: {
+        token_hash: sha256(token),
+        revoked_at: null,
+        expires_at: { gt: new Date() },
+      },
+      include: { broker_profiles: { include: { users: true } } },
     });
     if (!referral) throw new NotFoundException("Invalid or expired referral");
     return {
       targetRole: "BROKER",
-      masterBrokerName: referral.master_broker_profiles.users_master_broker_profiles_user_idTousers.name,
+      parentBrokerName: referral.broker_profiles.users.name,
     };
   }
 
-  async registerViaReferral(token: string, data: Record<string, string>, files: IdentityDocumentFiles) {
+  async registerViaReferral(
+    token: string,
+    data: Record<string, string>,
+    files: IdentityDocumentFiles,
+  ) {
     const employeeId = verifyEmployeeReferralToken(token);
     if (employeeId) {
-      return this.registration.createMasterBroker(data, files, employeeId);
+      return this.registration.createBroker(data, files, {
+        createdByUserId: employeeId,
+      });
     }
     const referral = await this.prisma.broker_referrals.findFirst({
-      where: { token_hash: sha256(token), revoked_at: null, expires_at: { gt: new Date() } },
+      where: {
+        token_hash: sha256(token),
+        revoked_at: null,
+        expires_at: { gt: new Date() },
+      },
+      include: { broker_profiles: { select: { created_by_user_id: true } } },
     });
     if (!referral) throw new BadRequestException("Invalid or expired referral");
-    return this.registration.createBroker(data, files, referral.master_broker_id);
+    return this.registration.createBroker(data, files, {
+      parentBrokerProfileId: referral.broker_id,
+      createdByUserId: referral.broker_profiles.created_by_user_id
+        ? referral.broker_profiles.created_by_user_id.toString()
+        : undefined,
+    });
   }
 }

@@ -23,36 +23,34 @@ interface CurrentUser {
   userCode: string | null;
 }
 
-interface MasterBroker {
+interface BrokerRow {
   id: string;
   name: string;
-  userCode: string | null;
+  user_code: string | null;
   email: string | null;
-  phone: string | null;
-  brokerCount: number;
+  mobile: string | null;
   status: "ACTIVE" | "INACTIVE";
-  createdAt: string;
+  created_at: string;
+  firm_name?: string | null;
+  brokerCount?: number;
+  parentBroker?: {
+    name: string;
+    userCode: string | null;
+  } | null;
 }
 
-interface Employee {
+interface EmployeeRow {
   id: string;
   name: string;
-  userCode: string | null;
+  user_code: string | null;
   email: string | null;
-  phone: string | null;
-  department: string | null;
+  mobile: string | null;
   role: string;
   status: "ACTIVE" | "INACTIVE";
-  createdAt: string;
-}
-
-interface DownlineBroker {
-  id: string;
-  name: string;
-  userCode: string | null;
-  email: string | null;
-  phone: string | null;
-  status: "ACTIVE" | "INACTIVE";
+  created_at: string;
+  employee_profiles?: {
+    designation: string | null;
+  } | null;
 }
 
 interface DirectoryUser {
@@ -64,6 +62,10 @@ interface DirectoryUser {
   status: "ACTIVE" | "INACTIVE";
   created_at: string;
   brokerCount?: number;
+  parentBroker?: {
+    name: string;
+    userCode: string | null;
+  } | null;
   employee_profiles?: {
     designation: string | null;
   } | null;
@@ -76,88 +78,7 @@ interface DirectoryResponse<T> {
   };
 }
 
-type StatusList = "master-brokers" | "employees" | "brokers";
-
-const navigation = [
-  { label: "Dashboard", abbreviation: "D", href: "/dashboard" },
-  { label: "Users", abbreviation: "U", href: "/users" },
-  { label: "Team", abbreviation: "T", href: "/team", active: true },
-  { label: "Reports", abbreviation: "R", href: "/reports" },
-  { label: "Settings", abbreviation: "S", href: "/settings" },
-];
-
-function Sidebar({
-  mobile,
-  onClose,
-}: {
-  mobile?: boolean;
-  onClose?: () => void;
-}) {
-  return (
-    <aside
-      className={`flex h-full w-72 flex-col bg-primary text-white shadow-xl ${
-        mobile
-          ? "fixed inset-y-0 left-0 z-50 md:hidden"
-          : "hidden md:fixed md:inset-y-0 md:left-0 md:flex"
-      }`}
-    >
-      <div className="flex h-20 items-center justify-between border-b border-white/15 px-6">
-        <div>
-          <p className="font-serif text-xl font-semibold">Mohan Bagh</p>
-          <p className="mt-0.5 text-xs text-white/70">Administration</p>
-        </div>
-
-        {mobile && (
-          <button
-            aria-label="Close navigation"
-            className="rounded-md p-2 text-white/80 hover:bg-white/10 hover:text-white"
-            onClick={onClose}
-            type="button"
-          >
-            <span aria-hidden="true">×</span>
-          </button>
-        )}
-      </div>
-
-      <nav
-        className="flex-1 space-y-1 px-3 py-6"
-        aria-label="Dashboard navigation"
-      >
-        {navigation.map((item) => (
-          <a
-            className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${
-              item.active
-                ? "bg-white text-primary shadow-sm"
-                : "text-white/75 hover:bg-white/10 hover:text-white"
-            }`}
-            href={item.href}
-            key={item.label}
-            onClick={mobile ? onClose : undefined}
-          >
-            <span
-              className={`flex h-7 w-7 items-center justify-center rounded text-xs font-bold ${
-                item.active ? "bg-primary/10" : "bg-white/10"
-              }`}
-            >
-              {item.abbreviation}
-            </span>
-
-            {item.label}
-          </a>
-        ))}
-      </nav>
-
-      <div className="border-t border-white/15 p-4">
-        <div className="rounded-lg bg-white/10 px-3 py-3 text-sm text-white/80">
-          <p className="font-medium text-white">Need assistance?</p>
-          <p className="mt-1 text-xs leading-5">
-            Contact the Mohan Bagh support team.
-          </p>
-        </div>
-      </div>
-    </aside>
-  );
-}
+type StatusList = "brokers" | "employees";
 
 function StatusToggle({
   status,
@@ -217,11 +138,10 @@ function Avatar({ name }: { name: string }) {
 
 export default function TeamPage() {
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"master-brokers" | "employees">(
-    "master-brokers",
+  const [activeTab, setActiveTab] = useState<"brokers" | "employees">(
+    "brokers",
   );
 
   const [search, setSearch] = useState("");
@@ -229,15 +149,13 @@ export default function TeamPage() {
     "ALL" | "ACTIVE" | "INACTIVE"
   >("ALL");
 
-  const [masterBrokers, setMasterBrokers] = useState<MasterBroker[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [employeeBrokers, setEmployeeBrokers] = useState<DownlineBroker[]>([]);
+  const [brokers, setBrokers] = useState<BrokerRow[]>([]);
+  const [employees, setEmployees] = useState<EmployeeRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedMasterBroker, setSelectedMasterBroker] =
-    useState<MasterBroker | null>(null);
-  const [downlineBrokers, setDownlineBrokers] = useState<DownlineBroker[]>([]);
+  const [selectedBroker, setSelectedBroker] = useState<BrokerRow | null>(null);
+  const [downlineBrokers, setDownlineBrokers] = useState<BrokerRow[]>([]);
   const [downlineLoading, setDownlineLoading] = useState(false);
   const [downlineError, setDownlineError] = useState<string | null>(null);
 
@@ -269,6 +187,10 @@ export default function TeamPage() {
   const [viewDetail, setViewDetail] = useState<TeamMemberDetail | null>(null);
   const [viewError, setViewError] = useState<string | null>(null);
 
+  const isAdmin = user?.role === "ADMIN";
+  const isEmployee = user?.role === "EMPLOYEE";
+  const isBrokerUser = user?.role === "BROKER";
+
   useEffect(() => {
     api
       .get<ApiResponse<CurrentUser>>("/auth/me")
@@ -288,82 +210,60 @@ export default function TeamPage() {
       try {
         setLoading(true);
         setLoadError(null);
-        const isEmployee = user.role === "EMPLOYEE";
-        const isMasterBroker = user.role === "MASTER_BROKER";
 
-        if (isMasterBroker) {
-          const brokersResponse = await api.get<
+        let brokersData: DirectoryUser[] = [];
+        let employeesData: DirectoryUser[] = [];
+
+        if (isBrokerUser) {
+          const response = await api.get<
             ApiResponse<DirectoryResponse<DirectoryUser>>
-          >("/master-broker/brokers", { params: { limit: 100 } });
-          if (!isCurrent) return;
-          setMasterBrokers([]);
-          setEmployees([]);
-          setEmployeeBrokers(
-            (brokersResponse.data.data?.items ?? []).map((broker) => ({
-              id: broker.id,
-              name: broker.name,
-              userCode: broker.user_code,
-              email: broker.email,
-              phone: broker.mobile,
-              status: broker.status,
-            })),
-          );
-          return;
-        }
-
-        const masterBrokerResponse = await api.get<
-          ApiResponse<DirectoryResponse<DirectoryUser>>
-        >(
-          isEmployee ? "/employee/downline" : "/admin/directory/master-brokers",
-          { params: { limit: 100 } },
-        );
-        const employeeResponse = isEmployee
-          ? null
-          : await api.get<ApiResponse<DirectoryResponse<DirectoryUser>>>(
+          >("/broker/downline", { params: { limit: 100 } });
+          brokersData = response.data.data?.items ?? [];
+        } else if (isEmployee) {
+          const response = await api.get<
+            ApiResponse<DirectoryResponse<DirectoryUser>>
+          >("/employee/downline", { params: { limit: 100 } });
+          brokersData = response.data.data?.items ?? [];
+        } else {
+          const [brokerResponse, employeeResponse] = await Promise.all([
+            api.get<ApiResponse<DirectoryResponse<DirectoryUser>>>(
+              "/admin/directory/brokers",
+              { params: { limit: 100 } },
+            ),
+            api.get<ApiResponse<DirectoryResponse<DirectoryUser>>>(
               "/admin/directory/employees",
               { params: { limit: 100 } },
-            );
-        const brokerResponse = isEmployee
-          ? await api.get<ApiResponse<DirectoryResponse<DirectoryUser>>>(
-              "/employee/brokers",
-              { params: { limit: 100 } },
-            )
-          : null;
+            ),
+          ]);
+          brokersData = brokerResponse.data.data?.items ?? [];
+          employeesData = employeeResponse.data.data?.items ?? [];
+        }
+
         if (!isCurrent) return;
 
-        setMasterBrokers(
-          (masterBrokerResponse.data.data?.items ?? []).map((broker) => ({
+        setBrokers(
+          brokersData.map((broker) => ({
             id: broker.id,
             name: broker.name,
-            userCode: broker.user_code,
+            user_code: broker.user_code,
             email: broker.email,
-            phone: broker.mobile,
-            brokerCount: broker.brokerCount ?? 0,
+            mobile: broker.mobile,
             status: broker.status,
-            createdAt: broker.created_at,
+            created_at: broker.created_at,
+            brokerCount: broker.brokerCount ?? 0,
+            parentBroker: broker.parentBroker ?? null,
           })),
         );
         setEmployees(
-          (employeeResponse?.data.data?.items ?? []).map((employee) => ({
+          employeesData.map((employee) => ({
             id: employee.id,
             name: employee.name,
-            userCode: employee.user_code,
+            user_code: employee.user_code,
             email: employee.email,
-            phone: employee.mobile,
-            department: null,
+            mobile: employee.mobile,
             role: employee.employee_profiles?.designation ?? "-",
             status: employee.status,
-            createdAt: employee.created_at,
-          })),
-        );
-        setEmployeeBrokers(
-          (brokerResponse?.data.data?.items ?? []).map((broker) => ({
-            id: broker.id,
-            name: broker.name,
-            userCode: broker.user_code,
-            email: broker.email,
-            phone: broker.mobile,
-            status: broker.status,
+            created_at: employee.created_at,
           })),
         );
       } catch {
@@ -379,10 +279,9 @@ export default function TeamPage() {
     return () => {
       isCurrent = false;
     };
-  }, [user]);
+  }, [user, isBrokerUser, isEmployee, isAdmin]);
 
-  const canShareReferral =
-    user?.role === "EMPLOYEE" || user?.role === "MASTER_BROKER";
+  const canShareReferral = user?.role === "EMPLOYEE" || user?.role === "BROKER";
 
   async function generateReferralLink() {
     try {
@@ -391,7 +290,7 @@ export default function TeamPage() {
       const { data } = await api.post<ApiResponse<{ token: string }>>(
         user?.role === "EMPLOYEE"
           ? "/employee/referrals"
-          : "/master-broker/referrals",
+          : "/broker/referrals",
       );
       const token = data.data?.token;
       if (!token) throw new Error("Missing referral token");
@@ -430,17 +329,9 @@ export default function TeamPage() {
   }
 
   function memberEndpoint(list: StatusList, id: string) {
-    const role = user?.role;
-
-    if (list === "master-brokers") {
-      return role === "EMPLOYEE"
-        ? `/employee/master-brokers/${id}`
-        : `/admin/master-brokers/${id}`;
-    }
-
     if (list === "employees") return `/admin/employees/${id}`;
-    if (role === "MASTER_BROKER") return `/master-broker/brokers/${id}`;
-    if (role === "EMPLOYEE") return `/employee/brokers/${id}`;
+    if (user?.role === "BROKER") return `/broker/downline/${id}`;
+    if (user?.role === "EMPLOYEE") return `/employee/brokers/${id}`;
     return `/admin/brokers/${id}`;
   }
 
@@ -472,25 +363,18 @@ export default function TeamPage() {
       >(statusEndpoint(list, id), { status: next });
       const updated = data.data?.status ?? next;
 
-      if (list === "master-brokers") {
-        setMasterBrokers((items) =>
-          items.map((item) =>
-            item.id === id ? { ...item, status: updated } : item,
-          ),
-        );
-      } else if (list === "employees") {
+      setBrokers((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, status: updated } : item,
+        ),
+      );
+      setDownlineBrokers((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, status: updated } : item,
+        ),
+      );
+      if (list === "employees") {
         setEmployees((items) =>
-          items.map((item) =>
-            item.id === id ? { ...item, status: updated } : item,
-          ),
-        );
-      } else {
-        setEmployeeBrokers((items) =>
-          items.map((item) =>
-            item.id === id ? { ...item, status: updated } : item,
-          ),
-        );
-        setDownlineBrokers((items) =>
           items.map((item) =>
             item.id === id ? { ...item, status: updated } : item,
           ),
@@ -504,9 +388,8 @@ export default function TeamPage() {
   }
 
   function documentBase() {
-    const role = user?.role;
-    if (role === "EMPLOYEE") return "/employee";
-    if (role === "MASTER_BROKER") return "/master-broker";
+    if (user?.role === "EMPLOYEE") return "/employee";
+    if (user?.role === "BROKER") return "/broker";
     return "/admin";
   }
 
@@ -533,9 +416,7 @@ export default function TeamPage() {
       if (!detail || !detail.name) throw new Error("Missing profile");
       setViewDetail(detail);
     } catch (error) {
-      setViewError(
-        apiErrorMessage(error, "Unable to load this profile."),
-      );
+      setViewError(apiErrorMessage(error, "Unable to load this profile."));
     }
   }
 
@@ -584,11 +465,7 @@ export default function TeamPage() {
   }
 
   function kindOfList(list: StatusList): TeamEditKind {
-    return list === "employees"
-      ? "employee"
-      : list === "master-brokers"
-        ? "master-broker"
-        : "broker";
+    return list === "employees" ? "employee" : "broker";
   }
 
   function closeEdit() {
@@ -634,8 +511,7 @@ export default function TeamPage() {
             Object.entries(values).forEach(([key, value]) =>
               body.append(key, value ?? ""),
             );
-            if (files.panDocument)
-              body.append("panDocument", files.panDocument);
+            if (files.panDocument) body.append("panDocument", files.panDocument);
             if (files.aadhaarDocument)
               body.append("aadhaarDocument", files.aadhaarDocument);
             return body;
@@ -652,23 +528,37 @@ export default function TeamPage() {
         email: updated?.email ?? values.email,
         mobile: updated?.mobile ?? values.mobile,
         designation: updated?.designation ?? values.designation,
+        firmName: updated?.firmName ?? values.firmName,
       };
       const id = editTarget.id;
 
-      if (editTarget.list === "master-brokers") {
-        setMasterBrokers((items) =>
-          items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  name: saved.name,
-                  email: saved.email || null,
-                  phone: saved.mobile,
-                }
-              : item,
-          ),
-        );
-      } else if (editTarget.list === "employees") {
+      setBrokers((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                name: saved.name,
+                email: saved.email || null,
+                mobile: saved.mobile,
+                firm_name: saved.firmName || null,
+              }
+            : item,
+        ),
+      );
+      setDownlineBrokers((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                name: saved.name,
+                email: saved.email || null,
+                mobile: saved.mobile,
+                firm_name: saved.firmName || null,
+              }
+            : item,
+        ),
+      );
+      if (editTarget.list === "employees") {
         setEmployees((items) =>
           items.map((item) =>
             item.id === id
@@ -676,33 +566,8 @@ export default function TeamPage() {
                   ...item,
                   name: saved.name,
                   email: saved.email || null,
-                  phone: saved.mobile,
+                  mobile: saved.mobile,
                   role: saved.designation || item.role,
-                }
-              : item,
-          ),
-        );
-      } else {
-        setEmployeeBrokers((items) =>
-          items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  name: saved.name,
-                  email: saved.email || null,
-                  phone: saved.mobile,
-                }
-              : item,
-          ),
-        );
-        setDownlineBrokers((items) =>
-          items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  name: saved.name,
-                  email: saved.email || null,
-                  phone: saved.mobile,
                 }
               : item,
           ),
@@ -719,54 +584,58 @@ export default function TeamPage() {
     }
   }
 
-  async function showDownline(masterBroker: MasterBroker) {
+  async function showDownline(broker: BrokerRow) {
     try {
-      setSelectedMasterBroker(masterBroker);
+      setSelectedBroker(broker);
       setDownlineBrokers([]);
       setDownlineError(null);
       setDownlineLoading(true);
+      const endpoint =
+        user?.role === "BROKER"
+          ? `/broker/downline/${broker.id}/downline`
+          : user?.role === "EMPLOYEE"
+            ? `/employee/brokers/${broker.id}/downline`
+            : `/admin/brokers/${broker.id}/downline`;
       const { data } = await api.get<
         ApiResponse<DirectoryResponse<DirectoryUser>>
-      >(
-        user?.role === "EMPLOYEE"
-          ? `/employee/master-brokers/${masterBroker.id}/brokers`
-          : `/admin/master-brokers/${masterBroker.id}/brokers`,
-        { params: { limit: 100 } },
-      );
+      >(endpoint, { params: { limit: 100 } });
       setDownlineBrokers(
-        (data.data?.items ?? []).map((broker) => ({
-          id: broker.id,
-          name: broker.name,
-          userCode: broker.user_code,
-          email: broker.email,
-          phone: broker.mobile,
-          status: broker.status,
+        (data.data?.items ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          user_code: item.user_code,
+          email: item.email,
+          mobile: item.mobile,
+          status: item.status,
+          created_at: item.created_at,
+          brokerCount: item.brokerCount ?? 0,
+          parentBroker: item.parentBroker ?? null,
         })),
       );
     } catch {
-      setDownlineError("Unable to load this master broker’s downline.");
+      setDownlineError("Unable to load this broker’s downline.");
     } finally {
       setDownlineLoading(false);
     }
   }
 
-  const filteredMasterBrokers = useMemo(() => {
+  const filteredBrokers = useMemo(() => {
     const query = search.toLowerCase().trim();
 
-    return masterBrokers.filter((broker) => {
+    return brokers.filter((broker) => {
       const matchesSearch =
         !query ||
         broker.name.toLowerCase().includes(query) ||
-        broker.userCode?.toLowerCase().includes(query) ||
+        broker.user_code?.toLowerCase().includes(query) ||
         broker.email?.toLowerCase().includes(query) ||
-        broker.phone?.toLowerCase().includes(query);
+        broker.mobile?.toLowerCase().includes(query);
 
       const matchesStatus =
         statusFilter === "ALL" || broker.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
-  }, [masterBrokers, search, statusFilter]);
+  }, [brokers, search, statusFilter]);
 
   const filteredEmployees = useMemo(() => {
     const query = search.toLowerCase().trim();
@@ -775,9 +644,9 @@ export default function TeamPage() {
       const matchesSearch =
         !query ||
         employee.name.toLowerCase().includes(query) ||
-        employee.userCode?.toLowerCase().includes(query) ||
+        employee.user_code?.toLowerCase().includes(query) ||
         employee.email?.toLowerCase().includes(query) ||
-        employee.phone?.toLowerCase().includes(query) ||
+        employee.mobile?.toLowerCase().includes(query) ||
         employee.role.toLowerCase().includes(query);
 
       const matchesStatus =
@@ -787,52 +656,37 @@ export default function TeamPage() {
     });
   }, [employees, search, statusFilter]);
 
-  const isMasterBroker = user?.role === "MASTER_BROKER";
-
-  const visibleBrokers = useMemo(() => {
-    if (!isMasterBroker) return employeeBrokers;
-
-    const query = search.toLowerCase().trim();
-
-    return employeeBrokers.filter((broker) => {
-      const matchesSearch =
-        !query ||
-        broker.name.toLowerCase().includes(query) ||
-        broker.userCode?.toLowerCase().includes(query) ||
-        broker.email?.toLowerCase().includes(query) ||
-        broker.phone?.toLowerCase().includes(query);
-
-      const matchesStatus =
-        statusFilter === "ALL" || broker.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [employeeBrokers, isMasterBroker, search, statusFilter]);
-
-  const brokerActiveCount = employeeBrokers.filter(
+  const brokerActiveCount = brokers.filter(
     (item) => item.status === "ACTIVE",
   ).length;
-
-  const initials = user?.name
-    ?.split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  const activeCount = masterBrokers.filter(
-    (item) => item.status === "ACTIVE",
-  ).length;
-
   const employeeActiveCount = employees.filter(
     (item) => item.status === "ACTIVE",
   ).length;
 
-  function changeTab(tab: "master-brokers" | "employees") {
+  function changeTab(tab: "brokers" | "employees") {
     setActiveTab(tab);
     setSearch("");
     setStatusFilter("ALL");
   }
+
+  function addLabel() {
+    if (isAdmin && activeTab === "employees") return "Add Employee";
+    return "Add Broker";
+  }
+
+  function goCreate() {
+    if (isAdmin && activeTab === "employees") {
+      router.push("/team/create?role=employee");
+    } else {
+      router.push("/team/create?role=broker");
+    }
+  }
+
+  const introCopy = isAdmin
+    ? "Manage brokers and employees from one place."
+    : isEmployee
+      ? "Manage the brokers registered under you."
+      : "Manage the brokers in your downline.";
 
   return (
     <AdminLayout user={user}>
@@ -847,31 +701,16 @@ export default function TeamPage() {
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
-              {isMasterBroker
-                ? "Manage the brokers registered under your firm."
-                : "Manage master brokers and employees from one place."}
+              {introCopy}
             </p>
           </div>
 
           <button
             type="button"
             className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90"
-            onClick={() => {
-              if (isMasterBroker) {
-                router.push("/team/create?role=broker");
-              } else if (activeTab === "master-brokers") {
-                router.push("/team/create?role=master-broker");
-              } else {
-                router.push("/team/create?role=employee");
-              }
-            }}
+            onClick={goCreate}
           >
-            +{" "}
-            {isMasterBroker
-              ? "Add Broker"
-              : activeTab === "master-brokers"
-                ? "Add Master Broker"
-                : "Add Employee"}
+            + {addLabel()}
           </button>
         </div>
       </section>
@@ -886,9 +725,9 @@ export default function TeamPage() {
               </p>
 
               <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600">
-                {user?.role === "EMPLOYEE"
-                  ? "Share this link so new master brokers can register under you."
-                  : "Share this link so new brokers can register under you."}
+                {isEmployee
+                  ? "Share this link so new brokers can register under you."
+                  : "Share this link so new brokers can join your downline."}
               </p>
             </div>
 
@@ -948,106 +787,67 @@ export default function TeamPage() {
           )}
 
           <p className="mt-3 text-xs text-gray-400">
-            {user?.role === "MASTER_BROKER"
-              ? "Generating a new link invalidates the previous one. Links expire after 7 days."
-              : "Links expire after 7 days."}
+            Generating a new link invalidates the previous one. Links expire
+            after 7 days.
           </p>
         </section>
       )}
 
       {/* Summary cards */}
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {isMasterBroker ? (
+        <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">
+            {isBrokerUser ? "Downline Brokers" : "Brokers"}
+          </p>
+
+          <p className="mt-3 font-serif text-3xl font-semibold text-primary">
+            {brokers.length}
+          </p>
+
+          <p className="mt-2 text-xs text-gray-500">
+            {brokerActiveCount} currently active
+          </p>
+        </article>
+
+        {isAdmin && (
           <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">Brokers</p>
+            <p className="text-sm font-medium text-gray-500">Employees</p>
 
             <p className="mt-3 font-serif text-3xl font-semibold text-primary">
-              {employeeBrokers.length}
+              {employees.length}
             </p>
 
             <p className="mt-2 text-xs text-gray-500">
-              {brokerActiveCount} currently active
+              {employeeActiveCount} currently active
             </p>
           </article>
-        ) : (
-          <>
-        <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Master Brokers</p>
-
-          <p className="mt-3 font-serif text-3xl font-semibold text-primary">
-            {masterBrokers.length}
-          </p>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {activeCount} currently active
-          </p>
-        </article>
-
-        <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Employees</p>
-
-          <p className="mt-3 font-serif text-3xl font-semibold text-primary">
-            {employees.length}
-          </p>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {employeeActiveCount} currently active
-          </p>
-        </article>
-
-        <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Total Brokers</p>
-
-          <p className="mt-3 font-serif text-3xl font-semibold text-primary">
-            {masterBrokers.reduce(
-              (total, broker) => total + broker.brokerCount,
-              0,
-            )}
-          </p>
-
-          <p className="mt-2 text-xs text-gray-500">Across master brokers</p>
-        </article>
-
-        <article className="rounded-xl border border-amber-900/10 bg-white p-5 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Active People</p>
-
-          <p className="mt-3 font-serif text-3xl font-semibold text-primary">
-            {activeCount + employeeActiveCount}
-          </p>
-
-          <p className="mt-2 text-xs text-gray-500">
-            Master brokers + employees
-          </p>
-        </article>
-          </>
         )}
       </section>
 
       {/* Main table */}
       <section className="mt-6 overflow-hidden rounded-xl border border-amber-900/10 bg-white shadow-sm">
         {/* Tabs */}
-        {!isMasterBroker && (
-        <div className="border-b border-amber-900/10 px-5 pt-4 sm:px-6">
-          <div className="flex gap-6">
-            <button
-              type="button"
-              onClick={() => changeTab("master-brokers")}
-              className={`relative pb-4 text-sm font-medium transition ${
-                activeTab === "master-brokers"
-                  ? "text-primary"
-                  : "text-gray-500 hover:text-gray-800"
-              }`}
-            >
-              Master Brokers
-              <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs">
-                {masterBrokers.length}
-              </span>
-              {activeTab === "master-brokers" && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
-              )}
-            </button>
+        {isAdmin && (
+          <div className="border-b border-amber-900/10 px-5 pt-4 sm:px-6">
+            <div className="flex gap-6">
+              <button
+                type="button"
+                onClick={() => changeTab("brokers")}
+                className={`relative pb-4 text-sm font-medium transition ${
+                  activeTab === "brokers"
+                    ? "text-primary"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                Brokers
+                <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs">
+                  {brokers.length}
+                </span>
+                {activeTab === "brokers" && (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
+                )}
+              </button>
 
-            {user?.role !== "EMPLOYEE" && (
               <button
                 type="button"
                 onClick={() => changeTab("employees")}
@@ -1065,9 +865,8 @@ export default function TeamPage() {
                   <span className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
                 )}
               </button>
-            )}
+            </div>
           </div>
-        </div>
         )}
 
         {/* Filters */}
@@ -1078,11 +877,9 @@ export default function TeamPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={
-                isMasterBroker
-                  ? "Search brokers..."
-                  : activeTab === "master-brokers"
-                    ? "Search master brokers..."
-                    : "Search employees..."
+                isAdmin && activeTab === "employees"
+                  ? "Search employees..."
+                  : "Search brokers..."
               }
               className="w-full rounded-lg border border-amber-900/15 bg-white px-4 py-2.5 text-sm outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/10"
             />
@@ -1121,20 +918,20 @@ export default function TeamPage() {
           </p>
         )}
 
-        {selectedMasterBroker && (
+        {selectedBroker && (
           <section className="m-5 overflow-hidden rounded-lg border border-amber-900/15 sm:m-6">
             <div className="flex items-center justify-between gap-4 bg-amber-50/50 px-5 py-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">
-                  {selectedMasterBroker.name}&apos;s downline brokers
+                  {selectedBroker.name}&apos;s downline brokers
                 </h3>
                 <p className="mt-1 text-xs text-gray-500">
-                  {selectedMasterBroker.userCode ?? "No master broker code"}
+                  {selectedBroker.user_code ?? "No broker code"}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedMasterBroker(null)}
+                onClick={() => setSelectedBroker(null)}
                 className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white"
               >
                 Close
@@ -1151,7 +948,7 @@ export default function TeamPage() {
               </p>
             ) : downlineBrokers.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-gray-500">
-                No brokers are assigned to this master broker.
+                No brokers under this broker yet.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -1166,6 +963,12 @@ export default function TeamPage() {
                       </th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Contact
+                      </th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Parent
+                      </th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Downline
                       </th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Status
@@ -1187,17 +990,36 @@ export default function TeamPage() {
                           </p>
                         </td>
                         <td className="px-5 py-4 text-sm font-medium text-primary">
-                          {broker.userCode ?? "-"}
+                          {broker.user_code ?? "-"}
                         </td>
                         <td className="px-5 py-4 text-sm text-gray-700">
-                          {broker.phone ?? "-"}
+                          {broker.mobile ?? "-"}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-gray-700">
+                          {broker.parentBroker ? (
+                            <>
+                              <p>{broker.parentBroker.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {broker.parentBroker.userCode ?? "-"}
+                              </p>
+                            </>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold text-gray-900">
+                          {broker.brokerCount ?? 0}
                         </td>
                         <td className="px-5 py-4">
                           <StatusToggle
                             status={broker.status}
                             busy={statusBusy === `brokers:${broker.id}`}
                             onToggle={() =>
-                              void toggleStatus("brokers", broker.id, broker.status)
+                              void toggleStatus(
+                                "brokers",
+                                broker.id,
+                                broker.status,
+                              )
                             }
                           />
                         </td>
@@ -1223,6 +1045,13 @@ export default function TeamPage() {
                           >
                             Edit
                           </button>
+                          <button
+                            type="button"
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                            onClick={() => void showDownline(broker)}
+                          >
+                            View Downline ({broker.brokerCount ?? 0})
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1233,279 +1062,27 @@ export default function TeamPage() {
           </section>
         )}
 
-        {/* Master Broker Table */}
-        {!isMasterBroker && activeTab === "master-brokers" && (
+        {/* Employees table */}
+        {isAdmin && activeTab === "employees" && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
-              <thead className="bg-amber-50/50">
-                <tr className="border-b border-amber-900/10">
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Master Broker
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Code
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Contact
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Brokers
-                  </th>
-
-                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Status
-                  </th>
-
-                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-amber-900/10">
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-6 py-12 text-center text-sm text-gray-500"
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                ) : filteredMasterBrokers.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
-                      <p className="text-sm font-medium text-gray-700">
-                        No master brokers found
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-500">
-                        Try changing your search or filters.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredMasterBrokers.map((broker) => (
-                    <tr
-                      key={broker.id}
-                      className="transition hover:bg-amber-50/30"
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={broker.name} />
-
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {broker.name}
-                            </p>
-
-                            <p className="mt-0.5 text-xs text-gray-500">
-                              {broker.email || "No email"}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-primary">
-                          {broker.userCode || "-"}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-gray-700">
-                          {broker.phone || "-"}
-                        </p>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-semibold text-gray-900">
-                          {broker.brokerCount}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <StatusToggle
-                          status={broker.status}
-                          busy={statusBusy === `master-brokers:${broker.id}`}
-                          onToggle={() =>
-                            void toggleStatus(
-                              "master-brokers",
-                              broker.id,
-                              broker.status,
-                            )
-                          }
-                        />
-                      </td>
-
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          type="button"
-                          className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
-                          onClick={() => void showDownline(broker)}
-                        >
-                          View Downline
-                        </button>
-
-                        <button
-                          type="button"
-                          className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
-                          onClick={() =>
-                            void openView("master-brokers", broker.id)
-                          }
-                        >
-                          View
-                        </button>
-
-                        <button
-                          type="button"
-                          className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-                          onClick={() =>
-                            void openEdit(
-                              "master-brokers",
-                              broker.id,
-                              `Edit ${broker.name}`,
-                            )
-                          }
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Broker list */}
-        {(user?.role === "EMPLOYEE" || isMasterBroker) && (
-          <div className="border-t border-amber-900/10">
-            <div className="px-6 py-4">
-              <h3 className="text-base font-semibold text-gray-900">
-                Your Brokers
-              </h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {isMasterBroker
-                  ? "Brokers registered under your firm."
-                  : "Brokers assigned under the master brokers you created."}
-              </p>
-            </div>
-            {visibleBrokers.length === 0 ? (
-              <p className="px-6 pb-6 text-sm text-gray-500">
-                {isMasterBroker
-                  ? "No brokers yet. Add a broker or share your referral link."
-                  : "No brokers have been created yet."}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[650px] text-left">
-                  <thead className="border-y border-amber-900/10 bg-amber-50/50">
-                    <tr>
-                      <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Broker
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Code
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Contact
-                      </th>
-                      <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-900/10">
-                    {visibleBrokers.map((broker) => (
-                      <tr key={broker.id}>
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-medium text-gray-900">
-                            {broker.name}
-                          </p>
-                          <p className="mt-0.5 text-xs text-gray-500">
-                            {broker.email ?? "No email"}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium text-primary">
-                          {broker.userCode ?? "-"}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-700">
-                          {broker.phone ?? "-"}
-                        </td>
-                        <td className="px-6 py-4">
-                          <StatusToggle
-                            status={broker.status}
-                            busy={statusBusy === `brokers:${broker.id}`}
-                            onToggle={() =>
-                              void toggleStatus("brokers", broker.id, broker.status)
-                            }
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
-                            onClick={() => void openView("brokers", broker.id)}
-                          >
-                            View
-                          </button>
-
-                          <button
-                            type="button"
-                            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
-                            onClick={() =>
-                              void openEdit(
-                                "brokers",
-                                broker.id,
-                                `Edit ${broker.name}`,
-                              )
-                            }
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "employees" && user?.role !== "EMPLOYEE" && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-left">
+            <table className="w-full min-w-[700px] text-left">
               <thead className="bg-amber-50/50">
                 <tr className="border-b border-amber-900/10">
                   <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Employee
                   </th>
-
                   <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Code
                   </th>
-
                   <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Contact
                   </th>
-
                   <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Designation
                   </th>
-
                   <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Status
                   </th>
-
                   <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Action
                   </th>
@@ -1543,37 +1120,27 @@ export default function TeamPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <Avatar name={employee.name} />
-
                           <div>
                             <p className="text-sm font-medium text-gray-900">
                               {employee.name}
                             </p>
-
                             <p className="mt-0.5 text-xs text-gray-500">
                               {employee.email || "No email"}
                             </p>
                           </div>
                         </div>
                       </td>
-
                       <td className="px-6 py-4">
                         <span className="text-sm font-medium text-primary">
-                          {employee.userCode || "-"}
+                          {employee.user_code || "-"}
                         </span>
                       </td>
-
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-gray-700">
-                          {employee.phone || "-"}
-                        </p>
+                      <td className="px-6 py-4 text-sm text-gray-700">
+                        {employee.mobile || "-"}
                       </td>
-
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-gray-700">
-                          {employee.role}
-                        </span>
+                      <td className="px-6 py-4 text-sm text-gray-700">
+                        {employee.role}
                       </td>
-
                       <td className="px-6 py-4">
                         <StatusToggle
                           status={employee.status}
@@ -1587,7 +1154,6 @@ export default function TeamPage() {
                           }
                         />
                       </td>
-
                       <td className="px-6 py-4 text-right">
                         <button
                           type="button"
@@ -1598,7 +1164,6 @@ export default function TeamPage() {
                         >
                           View
                         </button>
-
                         <button
                           type="button"
                           className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
@@ -1620,37 +1185,154 @@ export default function TeamPage() {
             </table>
           </div>
         )}
+
+        {/* Brokers table */}
+        {(activeTab === "brokers" || !isAdmin) && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[850px] text-left">
+              <thead className="bg-amber-50/50">
+                <tr className="border-b border-amber-900/10">
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Broker
+                  </th>
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Code
+                  </th>
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Contact
+                  </th>
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Downline
+                  </th>
+                  <th className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-amber-900/10">
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-12 text-center text-sm text-gray-500"
+                    >
+                      Loading...
+                    </td>
+                  </tr>
+                ) : filteredBrokers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center">
+                      <p className="text-sm font-medium text-gray-700">
+                        No brokers found
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Try changing your search or filters.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredBrokers.map((broker) => (
+                    <tr
+                      key={broker.id}
+                      className="transition hover:bg-amber-50/30"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={broker.name} />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {broker.name}
+                            </p>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {broker.email || "No email"}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-primary">
+                          {broker.user_code || "-"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-700">
+                        {broker.mobile || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-700">
+                        {broker.parentBroker ? (
+                          <>
+                            <p>{broker.parentBroker.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {broker.parentBroker.userCode ?? "-"}
+                            </p>
+                          </>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {broker.brokerCount ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusToggle
+                          status={broker.status}
+                          busy={statusBusy === `brokers:${broker.id}`}
+                          onToggle={() =>
+                            void toggleStatus(
+                              "brokers",
+                              broker.id,
+                              broker.status,
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          type="button"
+                          className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                          onClick={() => void showDownline(broker)}
+                        >
+                          View Downline
+                        </button>
+
+                        <button
+                          type="button"
+                          className="rounded-lg px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5"
+                          onClick={() => void openView("brokers", broker.id)}
+                        >
+                          View
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                          onClick={() =>
+                            void openEdit(
+                              "brokers",
+                              broker.id,
+                              `Edit ${broker.name}`,
+                            )
+                          }
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      {viewTarget && !viewDetail && !viewError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <p className="rounded-lg bg-white px-6 py-4 text-sm text-gray-600 shadow-xl">
-            Loading profile...
-          </p>
-        </div>
-      )}
-
-      {viewTarget && !viewDetail && viewError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
-            <p role="alert" className="text-sm text-red-700">
-              {viewError}
-            </p>
-
-            <button
-              type="button"
-              onClick={closeView}
-              className="mt-4 rounded-lg border border-amber-900/15 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
+      {/* Modals */}
       {viewTarget && viewDetail && (
         <TeamMemberViewModal
-          key={viewTarget.id}
           detail={viewDetail}
           documentUrl={(type) => documentUrl(viewTarget.id, type)}
           onClose={closeView}
@@ -1658,25 +1340,24 @@ export default function TeamPage() {
         />
       )}
 
-      {editTarget && !editValues && !editError && (
+      {viewTarget && !viewDetail && !viewError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <p className="rounded-lg bg-white px-6 py-4 text-sm text-gray-600 shadow-xl">
+          <p className="rounded-xl bg-white px-6 py-4 text-sm text-gray-600">
             Loading profile...
           </p>
         </div>
       )}
 
-      {editTarget && !editValues && editError && (
+      {viewError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 text-center shadow-xl">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6">
             <p role="alert" className="text-sm text-red-700">
-              {editError}
+              {viewError}
             </p>
-
             <button
               type="button"
-              onClick={closeEdit}
-              className="mt-4 rounded-lg border border-amber-900/15 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+              onClick={closeView}
+              className="mt-4 rounded-lg border border-amber-900/15 px-4 py-2 text-sm font-medium text-gray-700"
             >
               Close
             </button>
@@ -1686,7 +1367,6 @@ export default function TeamPage() {
 
       {editTarget && editValues && (
         <TeamMemberEditModal
-          key={editTarget.id}
           title={editTarget.title}
           kind={editTarget.kind}
           defaultValues={editValues}

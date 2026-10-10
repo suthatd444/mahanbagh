@@ -98,139 +98,27 @@ export class AdminService {
     };
   }
 
-  async directoryMasterBrokers(params: any) {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = params;
-    const skip = (page - 1) * limit;
-    const where: any = { deleted_at: null, roles: { code: "MASTER_BROKER" } };
-    if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
-        { mobile: { contains: search } },
-        { user_code: { contains: search } },
-      ];
-    }
-    const [total, items] = await Promise.all([
-      this.prisma.users.count({ where }),
-      this.prisma.users.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: "desc" },
-      }),
-    ]);
-    const itemsWithBrokerCount = await Promise.all(
-      items.map(async (item) => {
-        const profile = await this.prisma.master_broker_profiles.findUnique({
-          where: { user_id: item.id },
-          select: { id: true },
-        });
-        const brokerCount = profile
-          ? await this.prisma.broker_profiles.count({
-              where: {
-                master_broker_id: profile.id,
-                users: { deleted_at: null },
-              },
-            })
-          : 0;
-
-        return {
-          id: item.id.toString(),
-          name: item.name,
-          user_code: item.user_code,
-          email: item.email,
-          mobile: item.mobile,
-          status: item.status,
-          created_at: item.created_at,
-          brokerCount,
-        };
-      }),
-    );
-    return {
-      items: itemsWithBrokerCount,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    };
-  }
-
-  async directoryMasterBrokerBrokers(masterBrokerId: string, params: any) {
-    let masterBrokerIdValue: bigint;
+  async directoryBrokerDownline(brokerUserId: string, params: any) {
+    let brokerIdValue: bigint;
     try {
-      masterBrokerIdValue = BigInt(masterBrokerId);
+      brokerIdValue = BigInt(brokerUserId);
     } catch {
-      throw new BadRequestException("Invalid master broker ID");
+      throw new BadRequestException("Invalid broker ID");
     }
-    const masterBrokerProfile =
-      await this.prisma.master_broker_profiles.findUnique({
-        where: { user_id: masterBrokerIdValue },
-        select: { id: true },
-      });
-    if (!masterBrokerProfile) {
-      throw new NotFoundException("Master broker not found");
+    const brokerProfile = await this.prisma.broker_profiles.findUnique({
+      where: { user_id: brokerIdValue },
+      select: { id: true },
+    });
+    if (!brokerProfile) {
+      throw new NotFoundException("Broker not found");
     }
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = params;
+    const { page = 1, limit = 10, search = "" } = params;
     const skip = (page - 1) * limit;
     const where: any = {
       deleted_at: null,
       roles: { code: "BROKER" },
-      broker_profiles: { master_broker_id: masterBrokerProfile.id },
+      broker_profiles: { parent_broker_id: brokerProfile.id },
     };
-    if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { email: { contains: search } },
-        { mobile: { contains: search } },
-        { user_code: { contains: search } },
-      ];
-    }
-    const [total, items] = await Promise.all([
-      this.prisma.users.count({ where }),
-      this.prisma.users.findMany({
-        where,
-        skip,
-        take: Number(limit),
-        orderBy: { created_at: "desc" },
-      }),
-    ]);
-    return {
-      items: items.map((item) => ({
-        id: item.id.toString(),
-        name: item.name,
-        user_code: item.user_code,
-        email: item.email,
-        mobile: item.mobile,
-        status: item.status,
-        created_at: item.created_at,
-      })),
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    };
-  }
-
-  async directoryBrokers(params: any) {
-    const { page = 1, limit = 10, search = "" } = params;
-    const skip = (page - 1) * limit;
-    const where: any = { deleted_at: null, roles: { code: "BROKER" } };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -246,21 +134,64 @@ export class AdminService {
         skip,
         take: Number(limit),
         orderBy: { created_at: "desc" },
-        include: { broker_profiles: true },
+        include: {
+          broker_profiles: {
+            include: {
+              parent: { include: { users: { select: { name: true, user_code: true } } } },
+            },
+          },
+        },
       }),
     ]);
     return {
-      items: items.map((item) => ({
-        id: item.id.toString(),
-        name: item.name,
-        user_code: item.user_code,
-        email: item.email,
-        mobile: item.mobile,
-        status: item.status,
-        created_at: item.created_at,
-        firm_name: item.broker_profiles?.firm_name ?? null,
-        rera_number: item.broker_profiles?.rera_number ?? null,
-      })),
+      items: await Promise.all(
+        items.map((item) => this.toBrokerDirectoryItem(item)),
+      ),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit)),
+      },
+    };
+  }
+
+  async directoryBrokers(params: any) {
+    const { page = 1, limit = 10, search = "" } = params;
+    const skip = (page - 1) * limit;
+    const where: any = {
+      deleted_at: null,
+      roles: { code: "BROKER" },
+      broker_profiles: { parent_broker_id: null },
+    };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { mobile: { contains: search } },
+        { user_code: { contains: search } },
+      ];
+    }
+    const [total, items] = await Promise.all([
+      this.prisma.users.count({ where }),
+      this.prisma.users.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { created_at: "desc" },
+        include: {
+          broker_profiles: {
+            include: {
+              parent: { include: { users: { select: { name: true, user_code: true } } } },
+            },
+          },
+        },
+      }),
+    ]);
+    return {
+      items: await Promise.all(
+        items.map((item) => this.toBrokerDirectoryItem(item)),
+      ),
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -272,41 +203,39 @@ export class AdminService {
 
   async deleteEmployee(id: string) {
     const user = await this.requireUser(id, "EMPLOYEE", "Employee");
-    const hasMBs = await this.prisma.master_broker_profiles.findFirst({
+    const hasBrokers = await this.prisma.broker_profiles.findFirst({
       where: {
         created_by_user_id: user.id,
-        users_master_broker_profiles_user_idTousers: { deleted_at: null },
+        users: { deleted_at: null },
       },
       select: { id: true },
     });
-    if (hasMBs)
+    if (hasBrokers)
       throw new ForbiddenException(
-        "Cannot delete employee with active master brokers",
+        "Cannot delete employee with active brokers",
       );
-    return this.softDeleteUser(user.id);
-  }
-
-  async deleteMasterBroker(id: string) {
-    const user = await this.requireUser(id, "MASTER_BROKER", "Master broker");
-    const profile = await this.prisma.master_broker_profiles.findUnique({
-      where: { user_id: user.id },
-      select: { id: true },
-    });
-    if (profile) {
-      const hasBrokers = await this.prisma.broker_profiles.findFirst({
-        where: { master_broker_id: profile.id, users: { deleted_at: null } },
-        select: { id: true },
-      });
-      if (hasBrokers)
-        throw new ForbiddenException(
-          "Cannot delete master broker with active brokers",
-        );
-    }
     return this.softDeleteUser(user.id);
   }
 
   async deleteBroker(id: string) {
     const user = await this.requireUser(id, "BROKER", "Broker");
+    const profile = await this.prisma.broker_profiles.findUnique({
+      where: { user_id: user.id },
+      select: { id: true },
+    });
+    if (profile) {
+      const hasDownline = await this.prisma.broker_profiles.findFirst({
+        where: {
+          parent_broker_id: profile.id,
+          users: { deleted_at: null },
+        },
+        select: { id: true },
+      });
+      if (hasDownline)
+        throw new ForbiddenException(
+          "Cannot delete broker with active downline brokers",
+        );
+    }
     return this.softDeleteUser(user.id);
   }
 
@@ -314,22 +243,32 @@ export class AdminService {
     return this.toggleUserStatus(id, rawStatus, "EMPLOYEE", "Employee", actorId);
   }
 
-  async setMasterBrokerStatus(
-    id: string,
-    rawStatus: unknown,
-    actorId?: string,
-  ) {
-    return this.toggleUserStatus(
-      id,
-      rawStatus,
-      "MASTER_BROKER",
-      "Master broker",
-      actorId,
-    );
-  }
-
   async setBrokerStatus(id: string, rawStatus: unknown, actorId?: string) {
     return this.toggleUserStatus(id, rawStatus, "BROKER", "Broker", actorId);
+  }
+
+  private async toBrokerDirectoryItem(item: any) {
+    const parent = item.broker_profiles?.parent?.users;
+    return {
+      id: item.id.toString(),
+      name: item.name,
+      user_code: item.user_code,
+      email: item.email,
+      mobile: item.mobile,
+      status: item.status,
+      created_at: item.created_at,
+      firm_name: item.broker_profiles?.firm_name ?? null,
+      rera_number: item.broker_profiles?.rera_number ?? null,
+      parentBroker: parent
+        ? { name: parent.name, userCode: parent.user_code }
+        : null,
+      brokerCount: await this.prisma.broker_profiles.count({
+        where: {
+          parent_broker_id: item.broker_profiles?.id,
+          users: { deleted_at: null },
+        },
+      }),
+    };
   }
 
   private async toggleUserStatus(

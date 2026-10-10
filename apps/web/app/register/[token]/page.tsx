@@ -7,11 +7,11 @@ import axios from "axios";
 import type { ApiResponse } from "@mohan-bagh/shared";
 import { api } from "../../../lib/api";
 
-type TargetRole = "MASTER_BROKER" | "BROKER";
+type TargetRole = "BROKER";
 
 interface ReferralInfo {
   targetRole: TargetRole;
-  masterBrokerName?: string;
+  parentBrokerName?: string | null;
 }
 
 interface RegisterForm {
@@ -76,10 +76,7 @@ export default function RegisterPage() {
       )
       .then(({ data }) => {
         const info = data.data;
-        if (
-          info?.targetRole === "MASTER_BROKER" ||
-          info?.targetRole === "BROKER"
-        ) {
+        if (info?.targetRole === "BROKER") {
           setReferral(info);
           setLoadState("ready");
         } else {
@@ -97,6 +94,8 @@ export default function RegisterPage() {
   function validate(): boolean {
     const nextErrors: Partial<Record<keyof RegisterForm, string>> = {};
 
+    // Only name, mobile, PAN and Aadhaar are compulsory; every other field and
+    // identity document upload is optional.
     if (!form.fullName.trim()) nextErrors.fullName = "Full name is required";
 
     if (!form.mobile.trim()) {
@@ -105,14 +104,9 @@ export default function RegisterPage() {
       nextErrors.mobile = "Enter a valid 10 digit mobile number";
     }
 
-    if (!form.email.trim()) {
-      nextErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       nextErrors.email = "Enter a valid email address";
     }
-
-    if (!form.city.trim()) nextErrors.city = "City is required";
-    if (!form.address.trim()) nextErrors.address = "Address is required";
 
     if (!form.pan.trim()) {
       nextErrors.pan = "PAN is required";
@@ -126,26 +120,9 @@ export default function RegisterPage() {
       nextErrors.aadhaar = "Enter a valid 12 digit Aadhaar number";
     }
 
-    if (!form.firmAgencyName.trim())
-      nextErrors.firmAgencyName = "Firm or agency name is required";
-
-    if (!form.bankHolderName.trim())
-      nextErrors.bankHolderName = "Account holder name is required";
-    if (!form.bankName.trim()) nextErrors.bankName = "Bank name is required";
-
-    if (!form.bankAccount.trim()) {
-      nextErrors.bankAccount = "Bank account number is required";
-    }
-
-    if (!form.bankIfsc.trim()) {
-      nextErrors.bankIfsc = "IFSC code is required";
-    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfsc)) {
+    if (form.bankIfsc.trim() && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfsc)) {
       nextErrors.bankIfsc = "Enter a valid 11 character IFSC code";
     }
-
-    if (!form.panDocument) nextErrors.panDocument = "PAN document is required";
-    if (!form.aadhaarDocument)
-      nextErrors.aadhaarDocument = "Aadhaar document is required";
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -166,6 +143,7 @@ export default function RegisterPage() {
         email: form.email,
         city: form.city,
         address: form.address,
+        firmName: form.firmAgencyName,
         pan: form.pan,
         aadhaar: form.aadhaar,
         bankHolderName: form.bankHolderName,
@@ -174,17 +152,12 @@ export default function RegisterPage() {
         bankIfsc: form.bankIfsc,
       };
 
-      if (referral?.targetRole === "MASTER_BROKER") {
-        Object.assign(fields, { firmAgencyName: form.firmAgencyName });
-      } else {
-        Object.assign(fields, { firmName: form.firmAgencyName });
-      }
-
       Object.entries(fields).forEach(([name, value]) =>
         payload.append(name, value),
       );
-      payload.append("panDocument", form.panDocument!);
-      payload.append("aadhaarDocument", form.aadhaarDocument!);
+      if (form.panDocument) payload.append("panDocument", form.panDocument);
+      if (form.aadhaarDocument)
+        payload.append("aadhaarDocument", form.aadhaarDocument);
 
       const { data } = await api.post<ApiResponse<CreatedUser>>(
         `/public/referrals/${encodeURIComponent(token)}/register`,
@@ -256,22 +229,18 @@ export default function RegisterPage() {
     );
   }
 
-  const isMasterBroker = referral?.targetRole === "MASTER_BROKER";
-
   return (
     <Shell>
       <h1 className="font-serif text-2xl font-semibold text-primary sm:text-3xl">
-        {isMasterBroker ? "Register as Master Broker" : "Register as Broker"}
+        Register as Broker
       </h1>
 
       <p className="mt-2 text-sm leading-6 text-gray-600">
-        {isMasterBroker
-          ? "Complete the form below to create your master broker account."
-          : `Complete the form below to create your broker account${
-              referral?.masterBrokerName
-                ? ` under ${referral.masterBrokerName}`
-                : ""
-            }.`}
+        {`Complete the form below to create your broker account${
+          referral?.parentBrokerName
+            ? ` under ${referral.parentBrokerName}`
+            : ""
+        }.`}
       </p>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
@@ -295,7 +264,6 @@ export default function RegisterPage() {
           />
           <FormInput
             label="Email"
-            required
             type="email"
             value={form.email}
             onChange={(value) => updateField("email", value)}
@@ -303,7 +271,6 @@ export default function RegisterPage() {
           />
           <FormInput
             label="City"
-            required
             value={form.city}
             onChange={(value) => updateField("city", value)}
             error={errors.city}
@@ -329,7 +296,6 @@ export default function RegisterPage() {
           <div className="sm:col-span-2">
             <FormTextarea
               label="Address"
-              required
               value={form.address}
               onChange={(value) => updateField("address", value)}
               error={errors.address}
@@ -340,7 +306,6 @@ export default function RegisterPage() {
         <FormSection title="Business details">
           <FormInput
             label="Firm or agency name"
-            required
             value={form.firmAgencyName}
             onChange={(value) => updateField("firmAgencyName", value)}
             error={errors.firmAgencyName}
@@ -350,28 +315,24 @@ export default function RegisterPage() {
         <FormSection title="Bank and identity documents">
           <FormInput
             label="Account holder name"
-            required
             value={form.bankHolderName}
             onChange={(value) => updateField("bankHolderName", value)}
             error={errors.bankHolderName}
           />
           <FormInput
             label="Bank name"
-            required
             value={form.bankName}
             onChange={(value) => updateField("bankName", value)}
             error={errors.bankName}
           />
           <FormInput
             label="Bank account number"
-            required
             value={form.bankAccount}
             onChange={(value) => updateField("bankAccount", value)}
             error={errors.bankAccount}
           />
           <FormInput
             label="IFSC code"
-            required
             value={form.bankIfsc}
             onChange={(value) =>
               updateField(
@@ -383,14 +344,12 @@ export default function RegisterPage() {
           />
           <FileInput
             label="PAN document"
-            required
             file={form.panDocument}
             onChange={(file) => updateField("panDocument", file)}
             error={errors.panDocument}
           />
           <FileInput
             label="Aadhaar document"
-            required
             file={form.aadhaarDocument}
             onChange={(file) => updateField("aadhaarDocument", file)}
             error={errors.aadhaarDocument}

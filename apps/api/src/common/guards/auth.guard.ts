@@ -25,7 +25,7 @@ export class AuthGuard implements CanActivate {
     req.user = {
       id: user.id.toString(),
       roleId: user.role_id,
-      role: user.roles?.name || '',
+      role: user.roles?.code || '',
       userCode: user.user_code,
       name: user.name,
     };

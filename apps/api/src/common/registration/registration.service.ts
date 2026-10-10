@@ -22,22 +22,9 @@ export class RegistrationService {
   ) {}
 
   async createEmployee(data: RegistrationData, files: IdentityDocumentFiles) {
-    this.requireFields(data, [
-      "name",
-      "email",
-      "mobile",
-      "address",
-      "city",
-      "designation",
-      "joiningDate",
-      "pan",
-      "aadhaar",
-      "bankHolderName",
-      "bankName",
-      "bankAccount",
-      "bankIfsc",
-    ]);
-    const joiningDate = new Date(data.joiningDate!);
+    this.requireFields(data, ["name", "mobile", "pan", "aadhaar"]);
+    const rawJoiningDate = data.joiningDate?.trim();
+    const joiningDate = rawJoiningDate ? new Date(rawJoiningDate) : new Date();
     if (Number.isNaN(joiningDate.getTime()))
       throw new BadRequestException("joiningDate must be valid");
 
@@ -49,63 +36,14 @@ export class RegistrationService {
         await tx.employee_profiles.create({
           data: {
             user_id: userId,
-            address: data.address!,
-            city: data.city!,
-            designation: data.designation!,
+            address: data.address ?? "",
+            city: data.city ?? "",
+            designation: data.designation ?? "",
             joining_date: joiningDate,
-            bank_holder_name: data.bankHolderName!,
-            bank_name: data.bankName!,
-            bank_account_encrypted: this.encryption.encrypt(data.bankAccount!),
-            bank_ifsc: data.bankIfsc!,
-            pan_encrypted: this.encryption.encrypt(data.pan!),
-            aadhaar_encrypted: this.encryption.encrypt(data.aadhaar!),
-            created_at: now,
-            updated_at: now,
-          },
-        });
-      },
-    );
-  }
-
-  async createMasterBroker(
-    data: RegistrationData,
-    files: IdentityDocumentFiles,
-    createdByUserId?: string,
-  ) {
-    this.requireFields(data, [
-      "name",
-      "email",
-      "mobile",
-      "address",
-      "city",
-      "firmAgencyName",
-      "pan",
-      "aadhaar",
-      "bankHolderName",
-      "bankName",
-      "bankAccount",
-      "bankIfsc",
-    ]);
-
-    return this.createWithDocuments(
-      data,
-      files,
-      "MASTER_BROKER",
-      async (tx, userId, now) => {
-        await tx.master_broker_profiles.create({
-          data: {
-            user_id: userId,
-            created_by_user_id: createdByUserId
-              ? BigInt(createdByUserId)
-              : null,
-            address: data.address!,
-            city: data.city!,
-            firm_name: data.firmAgencyName!,
-            commission_percentage: data.commissionPercentage || "0",
-            bank_holder_name: data.bankHolderName!,
-            bank_name: data.bankName!,
-            bank_account_encrypted: this.encryption.encrypt(data.bankAccount!),
-            bank_ifsc: data.bankIfsc!,
+            bank_holder_name: data.bankHolderName ?? null,
+            bank_name: data.bankName ?? null,
+            bank_account_encrypted: this.encryptOptional(data.bankAccount),
+            bank_ifsc: data.bankIfsc ?? null,
             pan_encrypted: this.encryption.encrypt(data.pan!),
             aadhaar_encrypted: this.encryption.encrypt(data.aadhaar!),
             created_at: now,
@@ -119,21 +57,12 @@ export class RegistrationService {
   async createBroker(
     data: RegistrationData,
     files: IdentityDocumentFiles,
-    masterBrokerProfileId: bigint,
+    options: {
+      parentBrokerProfileId?: bigint;
+      createdByUserId?: string;
+    } = {},
   ) {
-    this.requireFields(data, [
-      "name",
-      "email",
-      "mobile",
-      "address",
-      "city",
-      "pan",
-      "aadhaar",
-      "bankHolderName",
-      "bankName",
-      "bankAccount",
-      "bankIfsc",
-    ]);
+    this.requireFields(data, ["name", "mobile", "pan", "aadhaar"]);
 
     return this.createWithDocuments(
       data,
@@ -143,14 +72,19 @@ export class RegistrationService {
         await tx.broker_profiles.create({
           data: {
             user_id: userId,
-            master_broker_id: masterBrokerProfileId,
-            address: data.address!,
-            city: data.city!,
-            firm_name: data.firmName,
-            bank_holder_name: data.bankHolderName!,
-            bank_name: data.bankName!,
-            bank_account_encrypted: this.encryption.encrypt(data.bankAccount!),
-            bank_ifsc: data.bankIfsc!,
+            parent_broker_id: options.parentBrokerProfileId ?? null,
+            created_by_user_id: options.createdByUserId
+              ? BigInt(options.createdByUserId)
+              : null,
+            address: data.address ?? "",
+            city: data.city ?? "",
+            firm_name: data.firmName ?? null,
+            rera_number: data.reraNumber ?? null,
+            commission_percentage: data.commissionPercentage || "0",
+            bank_holder_name: data.bankHolderName ?? null,
+            bank_name: data.bankName ?? null,
+            bank_account_encrypted: this.encryptOptional(data.bankAccount),
+            bank_ifsc: data.bankIfsc ?? null,
             pan_encrypted: this.encryption.encrypt(data.pan!),
             aadhaar_encrypted: this.encryption.encrypt(data.aadhaar!),
             created_at: now,
@@ -164,7 +98,7 @@ export class RegistrationService {
   private async createWithDocuments(
     data: RegistrationData,
     files: IdentityDocumentFiles,
-    roleCode: "EMPLOYEE" | "MASTER_BROKER" | "BROKER",
+    roleCode: "EMPLOYEE" | "BROKER",
     createProfile: (
       tx: Prisma.TransactionClient,
       userId: bigint,
@@ -172,7 +106,7 @@ export class RegistrationService {
     ) => Promise<void>,
   ) {
     const { panDocument, aadhaarDocument } = getIdentityUploadFiles(files);
-    this.validateBankIfsc(data.bankIfsc!);
+    if (data.bankIfsc?.trim()) this.validateBankIfsc(data.bankIfsc.trim());
     const panHash = sha256(data.pan!.toUpperCase());
     const aadhaarHash = sha256(data.aadhaar!);
 
@@ -203,7 +137,7 @@ export class RegistrationService {
             user_code: userCode,
             role_id: role.id,
             name: data.name!,
-            email: data.email!,
+            email: data.email?.trim() || null,
             mobile: data.mobile!,
             status: "ACTIVE",
             is_verified: true,
@@ -228,28 +162,31 @@ export class RegistrationService {
             },
           ],
         });
-        await tx.uploaded_documents.createMany({
-          data: [
-            {
-              user_id: createdUser.id,
-              document_type: "PAN",
-              storage_path: `identity-documents/${panDocument.filename}`,
-              original_name: panDocument.originalname,
-              mime_type: panDocument.mimetype,
-              size_bytes: panDocument.size,
-              created_at: now,
-            },
-            {
-              user_id: createdUser.id,
-              document_type: "AADHAAR",
-              storage_path: `identity-documents/${aadhaarDocument.filename}`,
-              original_name: aadhaarDocument.originalname,
-              mime_type: aadhaarDocument.mimetype,
-              size_bytes: aadhaarDocument.size,
-              created_at: now,
-            },
-          ],
-        });
+        // Identity document files are optional; only persist the ones uploaded.
+        const uploadedDocuments = [
+          panDocument && {
+            user_id: createdUser.id,
+            document_type: "PAN" as const,
+            storage_path: `identity-documents/${panDocument.filename}`,
+            original_name: panDocument.originalname,
+            mime_type: panDocument.mimetype,
+            size_bytes: panDocument.size,
+            created_at: now,
+          },
+          aadhaarDocument && {
+            user_id: createdUser.id,
+            document_type: "AADHAAR" as const,
+            storage_path: `identity-documents/${aadhaarDocument.filename}`,
+            original_name: aadhaarDocument.originalname,
+            mime_type: aadhaarDocument.mimetype,
+            size_bytes: aadhaarDocument.size,
+            created_at: now,
+          },
+        ].filter(Boolean) as Prisma.uploaded_documentsCreateManyInput[];
+
+        if (uploadedDocuments.length) {
+          await tx.uploaded_documents.createMany({ data: uploadedDocuments });
+        }
         return createdUser;
       });
 
@@ -278,6 +215,11 @@ export class RegistrationService {
         "bankIfsc must be a valid 11 character IFSC code",
       );
     }
+  }
+
+  private encryptOptional(value: string | undefined) {
+    const normalized = value?.trim();
+    return normalized ? this.encryption.encrypt(normalized) : null;
   }
 }
 

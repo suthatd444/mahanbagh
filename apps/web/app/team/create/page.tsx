@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AdminLayout from "../../../components/admin/AdminLayout";
 import { api } from "../../../lib/api";
 
-type Role = "EMPLOYEE" | "MASTER_BROKER" | "BROKER";
+type Role = "EMPLOYEE" | "BROKER";
 
 type TeamMemberForm = {
   role: Role;
@@ -25,11 +25,9 @@ type TeamMemberForm = {
   designation: string;
   joiningDate: string;
 
-  // Master Broker
-  masterBrokerCode: string;
-  masterBrokerId: string;
-
+  // Broker
   firmAgencyName: string;
+
   bankHolderName: string;
   bankName: string;
   bankAccount: string;
@@ -39,13 +37,8 @@ type TeamMemberForm = {
 };
 
 interface CurrentUser {
-  role: string;
-}
-
-interface MasterBrokerOption {
-  id: string;
   name: string;
-  user_code: string | null;
+  role: string;
 }
 
 function createInitialForm(role: Role): TeamMemberForm {
@@ -63,11 +56,8 @@ function createInitialForm(role: Role): TeamMemberForm {
     employeeCode: "",
     designation: "",
     joiningDate: "",
-
-    masterBrokerCode: "",
-    masterBrokerId: "",
-
     firmAgencyName: "",
+
     bankHolderName: "",
     bankName: "",
     bankAccount: "",
@@ -91,15 +81,10 @@ function CreateTeamMemberForm() {
 
   const [form, setForm] = useState<TeamMemberForm>(() =>
     createInitialForm(
-      searchParams.get("role") === "master-broker"
-        ? "MASTER_BROKER"
-        : searchParams.get("role") === "broker"
-          ? "BROKER"
-          : "EMPLOYEE",
+      searchParams.get("role") === "employee" ? "EMPLOYEE" : "BROKER",
     ),
   );
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [masterBrokers, setMasterBrokers] = useState<MasterBrokerOption[]>([]);
 
   const [errors, setErrors] = useState<
     Partial<Record<keyof TeamMemberForm, string>>
@@ -112,27 +97,19 @@ function CreateTeamMemberForm() {
     api
       .get<{ data?: CurrentUser }>("/auth/me")
       .then(({ data }) => {
-        setCurrentUser(data.data ?? null);
-        if (data.data?.role === "EMPLOYEE") {
-          setForm((previous) => ({ ...previous, role: "MASTER_BROKER" }));
-          api
-            .get<{ data?: { items: MasterBrokerOption[] } }>(
-              "/employee/downline",
-              { params: { limit: 100 } },
-            )
-            .then(({ data: response }) =>
-              setMasterBrokers(response.data?.items ?? []),
-            )
-            .catch(() => setMasterBrokers([]));
-        } else if (data.data?.role === "MASTER_BROKER") {
+        const user = data.data ?? null;
+        setCurrentUser(user);
+        // Only admins can create employees; everyone else creates brokers.
+        if (user?.role !== "ADMIN") {
           setForm((previous) => ({ ...previous, role: "BROKER" }));
         }
       })
       .catch(() => setCurrentUser(null));
-  }, []);
+  }, [router]);
 
+  const isAdmin = currentUser?.role === "ADMIN";
   const isEmployeeCreator = currentUser?.role === "EMPLOYEE";
-  const isMasterBrokerCreator = currentUser?.role === "MASTER_BROKER";
+  const isBrokerCreator = currentUser?.role === "BROKER";
 
   function updateField<K extends keyof TeamMemberForm>(
     field: K,
@@ -152,6 +129,8 @@ function CreateTeamMemberForm() {
   function validate(): boolean {
     const nextErrors: Partial<Record<keyof TeamMemberForm, string>> = {};
 
+    // Only name, mobile, PAN and Aadhaar are compulsory; every other field and
+    // identity document upload is optional.
     if (!form.fullName.trim()) {
       nextErrors.fullName = "Full name is required";
     }
@@ -162,18 +141,8 @@ function CreateTeamMemberForm() {
       nextErrors.mobile = "Enter a valid 10 digit mobile number";
     }
 
-    if (!form.email.trim()) {
-      nextErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       nextErrors.email = "Enter a valid email address";
-    }
-
-    if (!form.city.trim()) {
-      nextErrors.city = "City is required";
-    }
-
-    if (!form.address.trim()) {
-      nextErrors.address = "Address is required";
     }
 
     if (!form.pan.trim()) {
@@ -188,54 +157,8 @@ function CreateTeamMemberForm() {
       nextErrors.aadhaar = "Enter a valid 12 digit Aadhaar number";
     }
 
-    if (!form.panDocument && !isMasterBrokerCreator) {
-      nextErrors.panDocument = "PAN document is required";
-    }
-
-    if (!form.aadhaarDocument && !isMasterBrokerCreator) {
-      nextErrors.aadhaarDocument = "Aadhaar document is required";
-    }
-
-    if (!form.bankHolderName.trim()) {
-      nextErrors.bankHolderName = "Account holder name is required";
-    }
-
-    if (!form.bankName.trim()) {
-      nextErrors.bankName = "Bank name is required";
-    }
-
-    if (!form.bankAccount.trim()) {
-      nextErrors.bankAccount = "Bank account number is required";
-    }
-
-    if (!form.bankIfsc.trim()) {
-      nextErrors.bankIfsc = "IFSC code is required";
-    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfsc)) {
+    if (form.bankIfsc.trim() && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.bankIfsc)) {
       nextErrors.bankIfsc = "Enter a valid 11 character IFSC code";
-    }
-
-    if (form.role === "EMPLOYEE") {
-      if (!form.designation) {
-        nextErrors.designation = "Designation is required";
-      }
-
-      if (!form.joiningDate) {
-        nextErrors.joiningDate = "Joining date is required";
-      }
-    }
-
-    if (form.role === "MASTER_BROKER") {
-      if (!form.firmAgencyName.trim()) {
-        nextErrors.firmAgencyName = "Firm or agency name is required";
-      }
-    }
-
-    if (
-      form.role === "BROKER" &&
-      !isMasterBrokerCreator &&
-      !form.masterBrokerId
-    ) {
-      nextErrors.masterBrokerId = "Select a master broker";
     }
 
     setErrors(nextErrors);
@@ -273,41 +196,31 @@ function CreateTeamMemberForm() {
           designation: form.designation,
           joiningDate: form.joiningDate,
         });
-      } else if (form.role === "MASTER_BROKER") {
-        Object.assign(fields, { firmAgencyName: form.firmAgencyName });
       } else {
         Object.assign(fields, {
-          masterBrokerId: form.masterBrokerId,
           firmName: form.firmAgencyName,
         });
       }
 
       let endpoint: string;
-      if (isMasterBrokerCreator) {
-        endpoint = "/master-broker/brokers";
-      } else if (form.role === "EMPLOYEE") {
+      if (form.role === "EMPLOYEE") {
         endpoint = "/admin/employees";
+      } else if (isBrokerCreator) {
+        endpoint = "/broker/downline";
       } else if (isEmployeeCreator) {
-        endpoint =
-          form.role === "BROKER"
-            ? "/employee/brokers"
-            : "/employee/master-brokers";
+        endpoint = "/employee/brokers";
       } else {
-        endpoint = "/admin/master-brokers";
+        endpoint = "/admin/brokers";
       }
 
-      if (isMasterBrokerCreator) {
-        delete fields.masterBrokerId;
-        await api.post(endpoint, fields);
-      } else {
-        const payload = new globalThis.FormData();
-        Object.entries(fields).forEach(([name, value]) =>
-          payload.append(name, value),
-        );
-        payload.append("panDocument", form.panDocument!);
-        payload.append("aadhaarDocument", form.aadhaarDocument!);
-        await api.post(endpoint, payload);
-      }
+      const payload = new globalThis.FormData();
+      Object.entries(fields).forEach(([name, value]) =>
+        payload.append(name, value),
+      );
+      if (form.panDocument) payload.append("panDocument", form.panDocument);
+      if (form.aadhaarDocument)
+        payload.append("aadhaarDocument", form.aadhaarDocument);
+      await api.post(endpoint, payload);
 
       router.push("/team");
     } catch (error: unknown) {
@@ -332,7 +245,8 @@ function CreateTeamMemberForm() {
 
   return (
         <Suspense fallback={<div>Loading...</div>}>
-    <AdminLayout>
+   
+    <AdminLayout user={currentUser}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Page Header */}
         <section>
@@ -345,9 +259,11 @@ function CreateTeamMemberForm() {
               </h1>
 
               <p className="mt-2 text-sm text-gray-500">
-                {isMasterBrokerCreator
-                  ? "Create a broker account under your firm."
-                  : "Create an employee or master broker account."}
+                {isBrokerCreator
+                  ? "Create a broker account under you."
+                  : isEmployeeCreator
+                    ? "Create a broker account under you."
+                    : "Create an employee or broker account."}
               </p>
             </div>
 
@@ -369,7 +285,7 @@ function CreateTeamMemberForm() {
           />
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {!isEmployeeCreator && !isMasterBrokerCreator && (
+            {isAdmin && (
               <RoleOption
                 value="EMPLOYEE"
                 selected={form.role === "EMPLOYEE"}
@@ -379,31 +295,22 @@ function CreateTeamMemberForm() {
               />
             )}
 
-            {!isMasterBrokerCreator && (
-              <RoleOption
-                value="MASTER_BROKER"
-                selected={form.role === "MASTER_BROKER"}
-                title="Master Broker"
-                description="Create a master broker account."
-                onChange={() => updateField("role", "MASTER_BROKER")}
-              />
-            )}
-
-            {(isEmployeeCreator || isMasterBrokerCreator) && (
-              <RoleOption
-                value="BROKER"
-                selected={form.role === "BROKER"}
-                title="Broker"
-                description={
-                  isMasterBrokerCreator
-                    ? "Create a broker under your firm."
-                    : "Create a broker under one of your master brokers."
-                }
-                onChange={() => updateField("role", "BROKER")}
-              />
-            )}
+            <RoleOption
+              value="BROKER"
+              selected={form.role === "BROKER"}
+              title="Broker"
+              description={
+                isBrokerCreator
+                  ? "Create a broker in your downline."
+                  : isEmployeeCreator
+                    ? "Create a broker under you."
+                    : "Create a broker account."
+              }
+              onChange={() => updateField("role", "BROKER")}
+            />
           </div>
         </section>
+
         {/* Employee Details */}
         {form.role === "EMPLOYEE" && (
           <section className="rounded-2xl border border-amber-900/20 border-t-4 border-t-amber-600 bg-white p-6 shadow-sm sm:p-7">
@@ -423,7 +330,6 @@ function CreateTeamMemberForm() {
 
               <FormSelect
                 label="Designation"
-                required
                 value={form.designation}
                 onChange={(value) => updateField("designation", value)}
                 error={errors.designation}
@@ -449,39 +355,10 @@ function CreateTeamMemberForm() {
 
               <FormInput
                 label="Joining date"
-                required
                 type="date"
                 value={form.joiningDate}
                 onChange={(value) => updateField("joiningDate", value)}
                 error={errors.joiningDate}
-              />
-            </div>
-          </section>
-        )}
-
-        {/* Master Broker Details */}
-        {form.role === "MASTER_BROKER" && (
-          <section className="rounded-2xl border border-amber-900/20 border-t-4 border-t-amber-600 bg-white p-6 shadow-sm sm:p-7">
-            <SectionTitle
-              title="Master Broker details"
-              description="Information related to the master broker."
-            />
-
-            <div className="mt-7 grid gap-x-6 gap-y-5 sm:grid-cols-2">
-              <FormInput
-                label="Master broker code"
-                value={form.masterBrokerCode}
-                readOnly
-                placeholder="Generated automatically"
-                helper="Saved after account creation"
-              />
-
-              <FormInput
-                label="Firm or agency name"
-                required
-                value={form.firmAgencyName}
-                onChange={(value) => updateField("firmAgencyName", value)}
-                error={errors.firmAgencyName}
               />
             </div>
           </section>
@@ -492,27 +369,15 @@ function CreateTeamMemberForm() {
             <SectionTitle
               title="Broker details"
               description={
-                isMasterBrokerCreator
-                  ? "This broker will be created under your firm."
-                  : "Assign this broker to one of your master brokers."
+                isBrokerCreator
+                  ? "This broker will be added to your downline."
+                  : isEmployeeCreator
+                    ? "This broker will be created under you."
+                    : "Information related to the broker."
               }
             />
 
             <div className="mt-7 grid gap-x-6 gap-y-5 sm:grid-cols-2">
-              {!isMasterBrokerCreator && (
-                <FormSelect
-                  label="Master broker"
-                  required
-                  value={form.masterBrokerId}
-                  onChange={(value) => updateField("masterBrokerId", value)}
-                  error={errors.masterBrokerId}
-                  options={masterBrokers.map((broker) => ({
-                    value: broker.id,
-                    label: `${broker.name} (${broker.user_code ?? "No code"})`,
-                  }))}
-                />
-              )}
-
               <FormInput
                 label="Firm or agency name"
                 value={form.firmAgencyName}
@@ -554,7 +419,6 @@ function CreateTeamMemberForm() {
 
             <FormInput
               label="Email"
-              required
               type="email"
               value={form.email}
               onChange={(value) => updateField("email", value)}
@@ -564,7 +428,6 @@ function CreateTeamMemberForm() {
 
             <FormInput
               label="City"
-              required
               value={form.city}
               onChange={(value) => updateField("city", value)}
               error={errors.city}
@@ -597,7 +460,6 @@ function CreateTeamMemberForm() {
             <div className="sm:col-span-2">
               <FormTextarea
                 label="Address"
-                required
                 value={form.address}
                 onChange={(value) => updateField("address", value)}
                 error={errors.address}
@@ -609,17 +471,12 @@ function CreateTeamMemberForm() {
         <section className="rounded-2xl border border-amber-900/20 border-t-4 border-t-amber-600 bg-white p-6 shadow-sm sm:p-7">
           <SectionTitle
             title="Bank and identity documents"
-            description={
-              isMasterBrokerCreator
-                ? "Bank details and identity numbers are required to create the account."
-                : "Bank details and identity documents are required to create the account."
-            }
+            description="Bank details and identity documents are optional."
           />
 
           <div className="mt-7 grid gap-x-6 gap-y-5 sm:grid-cols-2">
             <FormInput
               label="Account holder name"
-              required
               value={form.bankHolderName}
               onChange={(value) => updateField("bankHolderName", value)}
               error={errors.bankHolderName}
@@ -627,7 +484,6 @@ function CreateTeamMemberForm() {
 
             <FormInput
               label="Bank name"
-              required
               value={form.bankName}
               onChange={(value) => updateField("bankName", value)}
               error={errors.bankName}
@@ -635,7 +491,6 @@ function CreateTeamMemberForm() {
 
             <FormInput
               label="Bank account number"
-              required
               value={form.bankAccount}
               onChange={(value) => updateField("bankAccount", value)}
               error={errors.bankAccount}
@@ -643,7 +498,6 @@ function CreateTeamMemberForm() {
 
             <FormInput
               label="IFSC code"
-              required
               value={form.bankIfsc}
               onChange={(value) =>
                 updateField(
@@ -657,25 +511,21 @@ function CreateTeamMemberForm() {
               error={errors.bankIfsc}
             />
 
-            {!isMasterBrokerCreator && (
-              <>
-                <FileInput
-                  label="PAN document"
-                  required
-                  file={form.panDocument}
-                  onChange={(file) => updateField("panDocument", file)}
-                  error={errors.panDocument}
-                />
+            <>
+              <FileInput
+                label="PAN document"
+                file={form.panDocument}
+                onChange={(file) => updateField("panDocument", file)}
+                error={errors.panDocument}
+              />
 
-                <FileInput
-                  label="Aadhaar document"
-                  required
-                  file={form.aadhaarDocument}
-                  onChange={(file) => updateField("aadhaarDocument", file)}
-                  error={errors.aadhaarDocument}
-                />
-              </>
-            )}
+              <FileInput
+                label="Aadhaar document"
+                file={form.aadhaarDocument}
+                onChange={(file) => updateField("aadhaarDocument", file)}
+                error={errors.aadhaarDocument}
+              />
+            </>
           </div>
         </section>
 
@@ -708,9 +558,7 @@ function CreateTeamMemberForm() {
               ? "Creating..."
               : form.role === "EMPLOYEE"
                 ? "Create Employee"
-                : form.role === "BROKER"
-                  ? "Create Broker"
-                  : "Create Master Broker"}
+                : "Create Broker"}
           </button>
         </div>
       </form>
