@@ -2,7 +2,7 @@ export const PERMISSIONS = {
   USER_MANAGE: 'user.manage',
   ROLE_MANAGE: 'role.manage',
   EMPLOYEE_MANAGE: 'employee.manage',
-  MASTER_BROKER_MANAGE: 'master_broker.manage',
+  BROKER_MANAGE: 'broker.manage',
   BROKER_CREATE: 'broker.create',
   BROKER_VIEW_ALL: 'broker.view_all',
   BROKER_UPDATE_ALL: 'broker.update_all',
@@ -11,12 +11,16 @@ export const PERMISSIONS = {
   PROFILE_UPDATE_OWN: 'profile.update_own',
   SECURITY_LOGS_VIEW: 'security_logs.view',
   SETTINGS_MANAGE: 'settings.manage',
+  PROJECT_MANAGE: 'project.manage',
+  ENQUIRY_MANAGE: 'enquiry.manage',
+  ENQUIRY_CREATE: 'enquiry.create',
+  ENQUIRY_VIEW_OWN: 'enquiry.view_own',
+  ENQUIRY_UPDATE_OWN: 'enquiry.update_own',
 } as const;
 
 export const ROLES = {
   ADMIN: 'ADMIN',
   EMPLOYEE: 'EMPLOYEE',
-  MASTER_BROKER: 'MASTER_BROKER',
   BROKER: 'BROKER',
 } as const;
 

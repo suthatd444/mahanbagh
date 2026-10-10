@@ -7,14 +7,12 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async generateUserCode(
-    roleName: "EMPLOYEE" | "MASTER_BROKER" | "BROKER",
+    roleName: "EMPLOYEE" | "BROKER",
   ): Promise<string> {
     const prefix =
       roleName === "EMPLOYEE"
         ? "EMP"
-        : roleName === "MASTER_BROKER"
-          ? "MB"
-          : "BRK";
+        : "BRK";
     const existingCodes = await this.prisma.users.findMany({
       where: { user_code: { startsWith: `${prefix}-` } },
       select: { user_code: true },

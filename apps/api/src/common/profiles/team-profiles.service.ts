@@ -13,12 +13,12 @@ import {
   removeIdentityUploadFiles,
 } from "../uploads/identity-upload";
 
-export type TeamRoleCode = "EMPLOYEE" | "MASTER_BROKER" | "BROKER";
+export type TeamRoleCode = "EMPLOYEE" | "BROKER";
 
 export type ProfileScope =
   | { actor: "ADMIN" }
   | { actor: "EMPLOYEE"; userId: bigint }
-  | { actor: "MASTER_BROKER"; userId: bigint };
+  | { actor: "BROKER"; userId: bigint };
 
 export type DocumentType = "PAN" | "AADHAAR";
 
@@ -54,7 +54,6 @@ const ACCOUNT_PATTERN = /^\d{6,20}$/;
 
 const ROLE_LABEL: Record<TeamRoleCode, string> = {
   EMPLOYEE: "Employee",
-  MASTER_BROKER: "Master broker",
   BROKER: "Broker",
 };
 
@@ -119,23 +118,23 @@ export class TeamProfilesService {
           },
         });
         await this.profileUpdate(tx, roleCode, profile.id, input, now);
-        if (panFile) {
-          await this.replaceDocument(
+        if (input.pan) {
+          await this.writeIdentityDocument(
             tx,
             userId,
             "PAN",
-            input.pan!,
+            input.pan,
             panFile,
             now,
             replacedPaths,
           );
         }
-        if (aadhaarFile) {
-          await this.replaceDocument(
+        if (input.aadhaar) {
+          await this.writeIdentityDocument(
             tx,
             userId,
             "AADHAAR",
-            input.aadhaar!,
+            input.aadhaar,
             aadhaarFile,
             now,
             replacedPaths,
@@ -196,7 +195,7 @@ export class TeamProfilesService {
       select: { roles: { select: { code: true } } },
     });
     const code = user?.roles?.code;
-    if (code === "EMPLOYEE" || code === "MASTER_BROKER" || code === "BROKER") {
+    if (code === "EMPLOYEE" || code === "BROKER") {
       return code;
     }
     throw new NotFoundException("User not found");
@@ -226,7 +225,7 @@ export class TeamProfilesService {
     userId: bigint,
     scope: ProfileScope,
   ) {
-    if (scope.actor === "MASTER_BROKER" && roleCode !== "BROKER") {
+    if (scope.actor === "BROKER" && roleCode !== "BROKER") {
       throw new NotFoundException("Not found");
     }
 
@@ -239,39 +238,46 @@ export class TeamProfilesService {
       return profile;
     }
 
-    if (roleCode === "MASTER_BROKER") {
-      const profile =
-        scope.actor === "ADMIN"
-          ? await this.prisma.master_broker_profiles.findUnique({
-              where: { user_id: userId },
-            })
-          : await this.prisma.master_broker_profiles.findFirst({
-              where: { user_id: userId, created_by_user_id: scope.userId },
-            });
-      if (!profile) throw new NotFoundException("Master broker not found");
-      return profile;
-    }
-
     const brokerProfile = await this.prisma.broker_profiles.findUnique({
       where: { user_id: userId },
     });
     if (!brokerProfile) throw new NotFoundException("Broker not found");
 
-    if (scope.actor === "ADMIN") return brokerProfile;
-
-    const owner = await this.prisma.master_broker_profiles.findUnique({
-      where: { id: brokerProfile.master_broker_id },
-      select: { id: true, user_id: true, created_by_user_id: true },
-    });
-    if (!owner) throw new NotFoundException("Broker not found");
-
-    const allowed =
-      scope.actor === "MASTER_BROKER"
-        ? owner.user_id === scope.userId
-        : owner.created_by_user_id === scope.userId;
-
-    if (!allowed) throw new NotFoundException("Broker not found");
+    await this.assertBrokerAccess(brokerProfile, scope);
     return brokerProfile;
+  }
+
+  private async assertBrokerAccess(
+    brokerProfile: { id: bigint; created_by_user_id: bigint | null },
+    scope: ProfileScope,
+  ) {
+    if (scope.actor === "ADMIN") return;
+
+    if (scope.actor === "EMPLOYEE") {
+      if (brokerProfile.created_by_user_id !== scope.userId) {
+        throw new NotFoundException("Broker not found");
+      }
+      return;
+    }
+
+    // A broker may only access profiles within their own downline tree.
+    const actorProfile = await this.prisma.broker_profiles.findUnique({
+      where: { user_id: scope.userId },
+      select: { id: true },
+    });
+    if (!actorProfile) throw new NotFoundException("Broker not found");
+
+    let currentId: bigint | null = brokerProfile.id;
+    while (currentId) {
+      if (currentId === actorProfile.id) return;
+      const parent: { parent_broker_id: bigint | null } | null =
+        await this.prisma.broker_profiles.findUnique({
+          where: { id: currentId },
+          select: { parent_broker_id: true },
+        });
+      currentId = parent?.parent_broker_id ?? null;
+    }
+    throw new NotFoundException("Broker not found");
   }
 
   private profileUpdate(
@@ -304,13 +310,6 @@ export class TeamProfilesService {
       });
     }
 
-    if (roleCode === "MASTER_BROKER") {
-      return tx.master_broker_profiles.update({
-        where: { id: profileId },
-        data: { ...shared, firm_name: input.firmName },
-      });
-    }
-
     return tx.broker_profiles.update({
       where: { id: profileId },
       data: {
@@ -321,12 +320,12 @@ export class TeamProfilesService {
     });
   }
 
-  private async replaceDocument(
+  private async writeIdentityDocument(
     tx: any,
     userId: bigint,
     type: DocumentType,
     value: string,
-    file: Express.Multer.File,
+    file: Express.Multer.File | undefined,
     now: Date,
     replacedPaths: string[],
   ) {
@@ -350,6 +349,10 @@ export class TeamProfilesService {
         },
       });
     }
+
+    // The number can be updated without a new file; only touch the stored
+    // file when a replacement upload was provided.
+    if (!file) return;
 
     const storagePath = `identity-documents/${file.filename}`;
     const existingUpload = await tx.uploaded_documents.findUnique({
@@ -408,11 +411,8 @@ export class TeamProfilesService {
     value: string | null,
     file: Express.Multer.File | undefined,
   ) {
-    if (value && !file) {
-      throw new BadRequestException(
-        `Upload the new ${type} document file together with the ${type} number.`,
-      );
-    }
+    // A document number may be changed on its own, but an uploaded file always
+    // needs its matching number so the stored hash stays consistent.
     if (file && !value) {
       throw new BadRequestException(
         `Enter the ${type} number for the uploaded document.`,
@@ -422,7 +422,7 @@ export class TeamProfilesService {
 
   private readInput(
     data: any,
-    roleCode: TeamRoleCode,
+    _roleCode: TeamRoleCode,
     current: { user: any; profile: any },
   ): ProfileInput {
     const str = (value: unknown) => String(value ?? "").trim();
@@ -452,10 +452,12 @@ export class TeamProfilesService {
       throw new BadRequestException("Enter a valid 10-digit mobile number");
     if (email && !EMAIL_PATTERN.test(email))
       throw new BadRequestException("Enter a valid email address");
-    if (!address) throw new BadRequestException("Address is required");
-    if (!city) throw new BadRequestException("City is required");
-    if (roleCode === "EMPLOYEE" && !designation)
-      throw new BadRequestException("Designation is required");
+    // PAN and Aadhaar are mandatory. On edit they may be left blank only when a
+    // value is already stored against the profile.
+    if (!pan && !current.profile.pan_encrypted)
+      throw new BadRequestException("PAN is required");
+    if (!aadhaar && !current.profile.aadhaar_encrypted)
+      throw new BadRequestException("Aadhaar number is required");
     if (bankIfsc && !IFSC_PATTERN.test(bankIfsc))
       throw new BadRequestException("Enter a valid 11-character IFSC code");
     if (bankAccount && !ACCOUNT_PATTERN.test(bankAccount))
@@ -539,18 +541,11 @@ export class TeamProfilesService {
       };
     }
 
-    if (roleCode === "MASTER_BROKER") {
-      return {
-        ...base,
-        firmName: profile.firm_name ?? "",
-        commissionPercentage: String(profile.commission_percentage ?? "0"),
-      };
-    }
-
     return {
       ...base,
       firmName: profile.firm_name ?? "",
       reraNumber: profile.rera_number ?? "",
+      commissionPercentage: String(profile.commission_percentage ?? "0"),
     };
   }
 

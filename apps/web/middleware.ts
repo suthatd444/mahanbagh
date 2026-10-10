@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(req: NextRequest) {
-  const protectedPaths = ['/dashboard', '/admin', '/employee', '/master-broker', '/broker'];
+  const protectedPaths = ['/dashboard', '/admin', '/employee', '/broker', '/projects'];
   const isProtected = protectedPaths.some((p) => req.nextUrl.pathname.startsWith(p));
   if (isProtected) {
     const session = req.cookies.get('sessionId');

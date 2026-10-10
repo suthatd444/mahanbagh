@@ -10,7 +10,7 @@ export interface TeamMemberDocument {
 
 export interface TeamMemberDetail {
   id: string;
-  role: "EMPLOYEE" | "MASTER_BROKER" | "BROKER";
+  role: "EMPLOYEE" | "BROKER";
   name: string;
   email: string | null;
   mobile: string;
@@ -31,7 +31,6 @@ export interface TeamMemberDetail {
   designation?: string;
   joiningDate?: string | null;
   firmName?: string;
-  commissionPercentage?: string;
   reraNumber?: string;
 }
 
@@ -98,11 +97,7 @@ export default function TeamMemberViewModal({
   onEdit,
 }: TeamMemberViewModalProps) {
   const roleLabel =
-    detail.role === "EMPLOYEE"
-      ? "Employee"
-      : detail.role === "MASTER_BROKER"
-        ? "Master Broker"
-        : "Broker";
+    detail.role === "EMPLOYEE" ? "Employee" : "Broker";
 
   const panUpload = detail.documents.find((doc) => doc.type === "PAN");
   const aadhaarUpload = detail.documents.find(
@@ -181,16 +176,6 @@ export default function TeamMemberViewModal({
               <>
                 <Row label="Designation" value={detail.designation} />
                 <Row label="Joining date" value={formatDate(detail.joiningDate)} />
-              </>
-            )}
-
-            {detail.role === "MASTER_BROKER" && (
-              <>
-                <Row label="Firm name" value={detail.firmName} />
-                <Row
-                  label="Commission %"
-                  value={detail.commissionPercentage ?? "0"}
-                />
               </>
             )}
 
