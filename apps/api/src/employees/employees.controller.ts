@@ -37,7 +37,7 @@ export class EmployeesController {
   ) {}
 
   @Get("downline")
-  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_VIEW_ASSIGNED)
   downline(@Req() req: any, @Query() q: any) {
     return this.emp.downline(req.user.id, q);
   }
@@ -54,13 +54,13 @@ export class EmployeesController {
   }
 
   @Get("brokers")
-  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_VIEW_ASSIGNED)
   allBrokers(@Req() req: any, @Query() q: any) {
     return this.emp.allBrokers(req.user.id, q);
   }
 
   @Get("brokers/:id/downline")
-  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_VIEW_ASSIGNED)
   brokers(@Req() req: any, @Param("id") id: string, @Query() q: any) {
     return this.emp.brokers(req.user.id, id, q);
   }

@@ -79,7 +79,7 @@ export class AdminController {
   }
 
   @Post("brokers")
-  @RequirePermissions(PERMISSIONS.BROKER_MANAGE)
+  @RequirePermissions(PERMISSIONS.BROKER_CREATE)
   @UseInterceptors(
     FileFieldsInterceptor(
       [

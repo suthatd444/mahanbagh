@@ -8,3 +8,7 @@ apps/api/dist2
 apps/web/dist2
 apps/web/.next
 
+apps/api/.env
+apps/web/.env
+
+
