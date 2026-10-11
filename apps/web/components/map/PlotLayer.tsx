@@ -92,7 +92,6 @@ export default function PlotLayer({
             1,
 
           fillColor:
-            plot.color ??
             PLOT_STATUS_COLORS[plot.status],
 
           fillOpacity:
