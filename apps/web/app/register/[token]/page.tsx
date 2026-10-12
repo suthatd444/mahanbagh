@@ -448,6 +448,10 @@ function FormInput({
       <input
         type={type}
         value={value}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+  
         onChange={(event) => onChange(event.target.value)}
         className={`h-12 w-full rounded-lg border bg-white px-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-primary focus:ring-2 focus:ring-primary/10 ${
           error ? "border-red-400" : "border-amber-900/20"

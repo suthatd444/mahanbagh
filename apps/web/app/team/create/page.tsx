@@ -663,6 +663,9 @@ function FormInput({
       <input
         type={type}
         value={value}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         readOnly={readOnly}
         placeholder={placeholder}
         onChange={(event) => onChange?.(event.target.value)}
