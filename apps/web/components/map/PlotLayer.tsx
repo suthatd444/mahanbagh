@@ -91,9 +91,7 @@ export default function PlotLayer({
           strokeWeight:
             1,
 
-          fillColor:
-            plot.color ??
-            PLOT_STATUS_COLORS[plot.status],
+          fillColor: PLOT_STATUS_COLORS[plot.status],
 
           fillOpacity:
             1,
